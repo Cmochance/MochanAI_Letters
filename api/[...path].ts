@@ -14,6 +14,7 @@ app.use((req, _res, next) => {
 });
 
 app.use((req, res, next) => {
+  res.header("X-Mochan-Api", "1");
   const origin = req.headers.origin;
   if (origin) {
     res.header("Access-Control-Allow-Origin", origin);
@@ -48,5 +49,9 @@ app.use(
     createContext,
   }),
 );
+
+app.use((req, res) => {
+  res.status(404).json({ error: "not_found", path: req.path });
+});
 
 export default app;
