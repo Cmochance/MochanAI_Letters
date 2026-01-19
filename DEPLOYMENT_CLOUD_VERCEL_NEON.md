@@ -47,6 +47,8 @@
 
 另外：如果你看到构建报错 `No Output Directory named "public"`，说明该 Vercel 项目被当作“需要产出静态目录”的项目在构建。仓库已提供 `public/` 目录用于满足默认的 Output Directory（也可以在 Vercel 项目设置里把 Output Directory 改为你需要的目录）。
 
+如果部署后访问 `/api/health` 变成 500（FUNCTION_INVOCATION_FAILED），通常是函数在冷启动时崩溃。一个常见原因是 Node/Vercel 对 TypeScript 源码的模块解析与本地开发不同：仓库内所有服务端内部引用已改为不带 `.js` 后缀，避免出现 `Cannot find module .../*.js` 导致的崩溃。更新后重新部署即可。
+
 ### 3.2 Vercel 环境变量（后端项目）
 
 在 Vercel 后端项目里配置（Production/Preview/Development 视情况同步）：

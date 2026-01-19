@@ -1,4 +1,4 @@
-import { generateImage } from "../_core/imageGeneration.js";
+import { generateImage } from "../_core/imageGeneration";
 
 /**
  * Generate a cover image for a novel using AI
