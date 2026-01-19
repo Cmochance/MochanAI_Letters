@@ -32,14 +32,14 @@ export default function OutlineViewScreen() {
             <TouchableOpacity onPress={() => router.back()}>
               <Text className="text-primary mb-2">← 返回</Text>
             </TouchableOpacity>
-            <Text className="text-3xl font-bold text-foreground">章节大纲</Text>
+            <Text className="text-3xl font-bold text-foreground font-title">章节大纲</Text>
             <Text className="mt-1 text-muted">{currentNovel?.title}</Text>
           </View>
 
           {/* Novel Overview */}
           <View className="bg-surface rounded-xl p-4 border border-border mb-6">
             <View className="flex-row justify-between items-center mb-3">
-              <Text className="text-lg font-semibold text-foreground">小说概览</Text>
+              <Text className="text-lg font-semibold text-foreground font-title">小说概览</Text>
               <View className="bg-primary/20 px-3 py-1 rounded-full">
                 <Text className="text-primary text-xs font-semibold">
                   {chapters?.length || 0} 章
@@ -65,7 +65,7 @@ export default function OutlineViewScreen() {
           {/* Chapter Tree */}
           {chapters && chapters.length > 0 ? (
             <View className="gap-3">
-              <Text className="text-lg font-semibold text-foreground mb-2">章节结构</Text>
+              <Text className="text-lg font-semibold text-foreground font-title mb-2">章节结构</Text>
               
               {chapters.map((chapter, index) => {
                 const isFirst = index === 0;
@@ -97,7 +97,7 @@ export default function OutlineViewScreen() {
                       
                       {/* Chapter Content */}
                       <View className="flex-1 bg-surface rounded-xl p-4 border border-border">
-                        <Text className="text-base font-semibold text-foreground mb-2">
+                        <Text className="text-base font-semibold text-foreground font-title mb-2">
                           {chapter.title}
                         </Text>
                         

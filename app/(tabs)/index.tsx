@@ -62,7 +62,7 @@ export default function NovelsScreen() {
           <View className="mb-6">
             <View className="flex-row justify-between items-center">
               <View>
-                <Text className="text-3xl font-bold text-foreground">我的小说</Text>
+                <Text className="text-4xl font-bold text-foreground font-title">我的小说</Text>
                 <Text className="mt-1 text-muted">共 {novels?.length || 0} 部作品</Text>
               </View>
               <TouchableOpacity
@@ -84,7 +84,7 @@ export default function NovelsScreen() {
                   onPress={() => router.push(`/novels/${novel.id}`)}
                   onLongPress={() => handleDeleteNovel(novel.id, novel.title)}
                 >
-                  <Text className="text-xl font-semibold text-foreground mb-2">
+                  <Text className="text-xl font-semibold text-foreground font-title mb-2">
                     {novel.title}
                   </Text>
                   {novel.description && (

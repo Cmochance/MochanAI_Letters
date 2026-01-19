@@ -72,7 +72,7 @@ export default function AIExpandScreen() {
             <TouchableOpacity onPress={() => router.back()}>
               <Text className="text-primary mb-2">← 返回</Text>
             </TouchableOpacity>
-            <Text className="text-3xl font-bold text-foreground">AI 内容扩写</Text>
+            <Text className="text-3xl font-bold text-foreground font-title">AI 内容扩写</Text>
             <Text className="mt-1 text-muted">第 {chapterNumber} 章</Text>
           </View>
 

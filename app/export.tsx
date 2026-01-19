@@ -83,13 +83,13 @@ export default function ExportScreen() {
             <TouchableOpacity onPress={() => router.back()}>
               <Text className="text-primary mb-2">← 返回</Text>
             </TouchableOpacity>
-            <Text className="text-3xl font-bold text-foreground">导出小说</Text>
+            <Text className="text-3xl font-bold text-foreground font-title">导出小说</Text>
             <Text className="mt-1 text-muted">{currentNovel?.title}</Text>
           </View>
 
           {/* Novel Info */}
           <View className="bg-surface rounded-xl p-4 border border-border mb-6">
-            <Text className="text-lg font-semibold text-foreground mb-3">小说信息</Text>
+            <Text className="text-lg font-semibold text-foreground font-title mb-3">小说信息</Text>
             <View className="gap-2">
               <View className="flex-row justify-between">
                 <Text className="text-muted">总字数</Text>
@@ -108,7 +108,7 @@ export default function ExportScreen() {
 
           {/* Export Options */}
           <View className="gap-4">
-            <Text className="text-lg font-semibold text-foreground mb-2">选择格式</Text>
+            <Text className="text-lg font-semibold text-foreground font-title mb-2">选择格式</Text>
 
             {/* TXT Format */}
             <TouchableOpacity
@@ -121,7 +121,7 @@ export default function ExportScreen() {
                   <Text className="text-2xl">📄</Text>
                 </View>
                 <View className="flex-1">
-                  <Text className="text-lg font-semibold text-foreground mb-1">TXT 文本</Text>
+                  <Text className="text-lg font-semibold text-foreground font-title mb-1">TXT 文本</Text>
                   <Text className="text-sm text-muted">纯文本格式,兼容性最好</Text>
                 </View>
                 {exporting && exportFormat === "txt" && (
@@ -141,7 +141,7 @@ export default function ExportScreen() {
                   <Text className="text-2xl">📝</Text>
                 </View>
                 <View className="flex-1">
-                  <Text className="text-lg font-semibold text-foreground mb-1">Markdown</Text>
+                  <Text className="text-lg font-semibold text-foreground font-title mb-1">Markdown</Text>
                   <Text className="text-sm text-muted">支持格式化,可转换为其他格式</Text>
                 </View>
                 {exporting && exportFormat === "markdown" && (
@@ -157,7 +157,7 @@ export default function ExportScreen() {
                   <Text className="text-2xl">📕</Text>
                 </View>
                 <View className="flex-1">
-                  <Text className="text-lg font-semibold text-foreground mb-1">PDF 文档</Text>
+                  <Text className="text-lg font-semibold text-foreground font-title mb-1">PDF 文档</Text>
                   <Text className="text-sm text-muted">即将推出</Text>
                 </View>
               </View>

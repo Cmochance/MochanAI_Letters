@@ -66,7 +66,7 @@ export default function SettingsScreen() {
             <TouchableOpacity onPress={() => router.back()}>
               <Text className="text-primary mb-2">← 返回</Text>
             </TouchableOpacity>
-            <Text className="text-3xl font-bold text-foreground">AI 配置</Text>
+            <Text className="text-3xl font-bold text-foreground font-title">AI 配置</Text>
             <Text className="mt-1 text-muted">配置您的 AI 模型参数</Text>
           </View>
 

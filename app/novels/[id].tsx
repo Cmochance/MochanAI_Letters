@@ -54,7 +54,7 @@ export default function ChaptersScreen() {
             </TouchableOpacity>
             <View className="flex-row justify-between items-center">
               <View>
-                <Text className="text-3xl font-bold text-foreground">章节列表</Text>
+                <Text className="text-3xl font-bold text-foreground font-title">章节列表</Text>
                 <Text className="mt-1 text-muted">共 {chapters?.length || 0} 章</Text>
               </View>
               <View className="flex-row gap-2">
@@ -88,7 +88,7 @@ export default function ChaptersScreen() {
                     <View className="w-10 h-10 rounded-full bg-primary/20 items-center justify-center">
                       <Text className="text-primary font-bold">{chapter.chapterNumber}</Text>
                     </View>
-                    <Text className="flex-1 text-lg font-semibold text-foreground">
+                    <Text className="text-lg font-semibold text-foreground font-title mb-2">
                       {chapter.title}
                     </Text>
                   </View>

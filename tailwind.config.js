@@ -22,6 +22,10 @@ module.exports = {
   theme: {
     extend: {
       colors: tailwindColors,
+      fontFamily: {
+        'serif': ['Noto Serif SC', 'serif'],
+        'title': ['Noto Serif SC', 'serif'],
+      },
     },
   },
   plugins: [

@@ -68,7 +68,7 @@ export default function ChapterDetailScreen() {
             <TouchableOpacity onPress={() => router.back()}>
               <Text className="text-primary mb-2">← 返回</Text>
             </TouchableOpacity>
-            <Text className="text-3xl font-bold text-foreground">编辑章节</Text>
+            <Text className="text-3xl font-bold text-foreground font-title">编辑章节</Text>
             <Text className="mt-1 text-muted">第 {chapter.chapterNumber} 章 · {wordCount} 字</Text>
           </View>
 
