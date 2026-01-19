@@ -123,6 +123,27 @@ export async function logout(): Promise<void> {
   });
 }
 
+export async function registerWithPassword(params: {
+  email: string;
+  password: string;
+  name?: string;
+}): Promise<{ sessionToken: string; user: any }> {
+  return apiCall<{ sessionToken: string; user: any }>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+export async function loginWithPassword(params: {
+  email: string;
+  password: string;
+}): Promise<{ sessionToken: string; user: any }> {
+  return apiCall<{ sessionToken: string; user: any }>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
 // Get current authenticated user (web uses cookie-based auth)
 export async function getMe(): Promise<{
   id: number;

@@ -4,11 +4,13 @@ import { Pool } from "pg";
 import { 
   InsertUser, 
   users, 
+  userCredentials,
   novels, 
   chapters, 
   chapterEmbeddings, 
   userSettings,
   notes,
+  type InsertUserCredentials,
   InsertNovel,
   InsertChapter,
   InsertChapterEmbedding,
@@ -20,6 +22,7 @@ import {
   Note
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { hashPassword, verifyPassword } from "./_core/password";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: Pool | null = null;
@@ -114,6 +117,73 @@ export async function getUserByOpenId(openId: string) {
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user: database not available");
+    return undefined;
+  }
+  const normalizedEmail = email.trim().toLowerCase();
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, normalizedEmail))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function setUserPassword(params: { userId: number; password: string }) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot set password: database not available");
+    throw new Error("database not available");
+  }
+  const hashed = await hashPassword({ password: params.password, pepper: ENV.passwordPepper });
+  const values: InsertUserCredentials = {
+    userId: params.userId,
+    algorithm: hashed.algorithm,
+    salt: hashed.salt,
+    passwordHash: hashed.hash,
+    updatedAt: new Date(),
+  };
+  await db
+    .insert(userCredentials)
+    .values(values)
+    .onConflictDoUpdate({
+      target: userCredentials.userId,
+      set: {
+        algorithm: values.algorithm,
+        salt: values.salt,
+        passwordHash: values.passwordHash,
+        updatedAt: new Date(),
+      },
+    });
+}
+
+export async function verifyUserPassword(params: { userId: number; password: string }) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot verify password: database not available");
+    return false;
+  }
+  const rows = await db
+    .select()
+    .from(userCredentials)
+    .where(eq(userCredentials.userId, params.userId))
+    .limit(1);
+  if (rows.length === 0) return false;
+  const row = rows[0];
+  return verifyPassword({
+    password: params.password,
+    pepper: ENV.passwordPepper,
+    stored: {
+      algorithm: row.algorithm as "scrypt",
+      salt: row.salt,
+      hash: row.passwordHash,
+    },
+  });
 }
 
 // ============ Novel Management ============

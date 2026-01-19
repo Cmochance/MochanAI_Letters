@@ -1,5 +1,7 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
+import * as db from "../db";
+import { ENV } from "./env";
 import { sdk } from "./sdk";
 
 export type TrpcContext = {
@@ -16,6 +18,20 @@ export async function createContext(opts: CreateExpressContextOptions): Promise<
   } catch (error) {
     // Authentication is optional for public procedures.
     user = null;
+  }
+
+  if (!user && (ENV.demoMode || ENV.authMode === "demo")) {
+    const openId = ENV.demoOpenId;
+    user = (await db.getUserByOpenId(openId)) ?? null;
+    if (!user) {
+      await db.upsertUser({
+        openId,
+        name: ENV.demoName,
+        loginMethod: "demo",
+        lastSignedIn: new Date(),
+      });
+      user = (await db.getUserByOpenId(openId)) ?? null;
+    }
   }
 
   return {

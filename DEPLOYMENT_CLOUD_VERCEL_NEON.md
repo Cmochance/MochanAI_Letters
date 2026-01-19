@@ -59,6 +59,15 @@
 - 若启用 OAuth：`VITE_APP_ID`、`OAUTH_SERVER_URL`、`VITE_OAUTH_PORTAL_URL`、`OWNER_OPEN_ID`、`OWNER_NAME`
 - 若启用 AI：`BUILT_IN_FORGE_API_URL`、`BUILT_IN_FORGE_API_KEY`
 
+登录相关说明：
+- 本仓库不自带第三方 OAuth 服务；如果你看到文档里的 `OAUTH_SERVER_URL` / `VITE_OAUTH_PORTAL_URL`，那是“接入外部 OAuth 服务”时才需要配置。
+- 如果你不打算接外部 OAuth，又要面向用户上线：建议使用本仓库内置的“邮箱 + 密码”登录（AUTH_MODE=local）。
+
+如果你暂时不打算接登录（不需要登录功能），可以开启 Demo 模式（仅建议自用/演示环境）：
+- `DEMO_MODE=1`
+- 可选：`DEMO_OPEN_ID=demo`、`DEMO_NAME=Demo User`
+开启后 `protectedProcedure` 会自动以 demo 用户身份运行，不再返回 401。
+
 ### 3.3 验证
 
 - 打开后端域名，访问：`/api/health`
@@ -124,4 +133,59 @@ Web 登录如果依赖 Cookie，会遇到跨域与 SameSite 限制：
 - 最理想：前后端同域名（例如都在同一个域名下，通过反向代理把 `/api` 指到后端）
 - 若前后端是不同域：需要正确设置 Cookie 的 `SameSite=None; Secure`，并确保 HTTPS
 - 本仓库的 CORS 逻辑会回显 Origin 并允许 credentials（见 [server/_core/index.ts](file:///d:/Users/32162/Documents/GitHub/MochanAI_Letters/server/_core/index.ts)），但 Serverless 下仍需验证实际响应头是否符合浏览器策略
+
+## 6. 生产推荐：启用 OAuth（一步到位）
+
+面向真实用户上线，建议直接启用 OAuth 登录（不要用 Demo 模式）。
+
+### 6.1 后端（API 项目）必填环境变量
+
+- `JWT_SECRET`：用于签名 Cookie/JWT，会话安全关键；请使用足够长的随机字符串
+- `VITE_APP_ID`：你的 OAuth App ID
+- `OAUTH_SERVER_URL`：OAuth 后端服务地址
+- `VITE_OAUTH_PORTAL_URL`：OAuth 门户地址（前端跳转用）
+- `OWNER_OPEN_ID`、`OWNER_NAME`：用于 owner 标识/通知（可选但建议配置）
+
+### 6.2 前端（Web 项目）环境变量
+
+- `EXPO_PUBLIC_API_BASE_URL`：填你的后端域名（例如 `https://<api>.vercel.app` 或自定义域）
+- `EXPO_PUBLIC_APP_ID`、`EXPO_PUBLIC_OAUTH_PORTAL_URL`、`EXPO_PUBLIC_OAUTH_SERVER_URL`
+- 可选：`EXPO_PUBLIC_OWNER_OPEN_ID`、`EXPO_PUBLIC_OWNER_NAME`
+
+提示：`scripts/load-env.js` 只会做变量映射，不会帮你“生成”缺失的 OAuth 变量；线上建议直接配置 `EXPO_PUBLIC_*`，避免排查困难。
+
+### 6.3 上线域名建议（避免 Cookie/跨域坑）
+
+- 推荐绑定自定义域，并尽量做到同站点（same-site）：
+  - Web：`https://app.example.com`
+  - API：`https://api.example.com`
+- 如果你希望 Web 端完全同域：让 Web 项目把 `/api/*` rewrite 到 API 域名（或把前后端合并到同一个项目），这样浏览器不会遇到跨站 Cookie 限制。
+
+### 6.4 验证清单
+
+- 打开 `https://<api>/api/health` 返回 `ok: true`
+- 打开 Web，点击登录能跳到 OAuth 门户
+- OAuth 回跳后，浏览器能收到 `Set-Cookie`（Application → Cookies 可见）
+- 再访问任意需要登录的接口（例如 `novels.list`）不再返回 401
+
+## 7. 生产推荐：不依赖外部 OAuth（邮箱 + 密码）
+
+如果你没有现成的 OAuth 服务（例如 Manus OAuth / 自建 OAuth），建议使用本仓库内置的邮箱密码登录（AUTH_MODE=local）。该模式无需依赖第三方认证服务，适合独立上线。
+
+### 7.1 后端（API 项目）环境变量
+
+- `AUTH_MODE=local`
+- `JWT_SECRET`：会话签名密钥（必填）
+- `AUTH_PASSWORD_PEPPER`：密码哈希增强用的 pepper（强烈建议配置一个长随机串）
+- `DATABASE_URL`：必填（用户/密码/小说数据都在库里）
+
+### 7.2 数据库迁移
+
+本模式新增了 `user_credentials` 表用于保存密码哈希（不会保存明文密码）。请在数据库中执行仓库里的 SQL：
+- `drizzle/0001_add_user_credentials.sql`
+
+### 7.3 前端（Web/App）行为
+
+- Web：登录成功后由后端 `Set-Cookie` 建立会话，后续请求自动携带 Cookie
+- App（iOS/Android）：登录成功后会保存 `sessionToken`（Bearer），后续请求走 Authorization
 

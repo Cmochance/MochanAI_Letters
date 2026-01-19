@@ -27,6 +27,18 @@ export const users = pgTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+export const userCredentials = pgTable("user_credentials", {
+  userId: integer("userId").primaryKey().notNull(),
+  algorithm: varchar("algorithm", { length: 32 }).notNull(),
+  salt: text("salt").notNull(),
+  passwordHash: text("passwordHash").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type UserCredentials = typeof userCredentials.$inferSelect;
+export type InsertUserCredentials = typeof userCredentials.$inferInsert;
+
 /**
  * Novels table - stores novel metadata
  */
