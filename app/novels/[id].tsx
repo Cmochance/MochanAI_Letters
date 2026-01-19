@@ -57,12 +57,20 @@ export default function ChaptersScreen() {
                 <Text className="text-3xl font-bold text-foreground">章节列表</Text>
                 <Text className="mt-1 text-muted">共 {chapters?.length || 0} 章</Text>
               </View>
-              <TouchableOpacity
-                className="bg-surface px-4 py-2 rounded-full border border-border active:opacity-70"
-                onPress={() => router.push(`/outline-view?novelId=${novelId}` as any)}
-              >
-                <Text className="text-primary font-semibold">📊 大纲</Text>
-              </TouchableOpacity>
+              <View className="flex-row gap-2">
+                <TouchableOpacity
+                  className="bg-surface px-4 py-2 rounded-full border border-border active:opacity-70"
+                  onPress={() => router.push(`/outline-view?novelId=${novelId}` as any)}
+                >
+                  <Text className="text-primary font-semibold">📊 大纲</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="bg-surface px-4 py-2 rounded-full border border-border active:opacity-70"
+                  onPress={() => router.push(`/export?novelId=${novelId}` as any)}
+                >
+                  <Text className="text-primary font-semibold">📥 导出</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
