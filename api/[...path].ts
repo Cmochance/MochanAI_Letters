@@ -6,6 +6,13 @@ import { registerOAuthRoutes } from "../server/_core/oauth";
 
 const app = express();
 
+app.use((req, _res, next) => {
+  if (!req.url.startsWith("/api/")) {
+    req.url = `/api${req.url.startsWith("/") ? "" : "/"}${req.url}`;
+  }
+  next();
+});
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin) {
