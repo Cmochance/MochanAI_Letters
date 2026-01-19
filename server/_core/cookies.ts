@@ -1,6 +1,7 @@
 import type { CookieOptions, Request } from "express";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const PUBLIC_SUFFIX_BLOCKLIST = new Set(["vercel.app"]);
 
 function isIpAddress(host: string) {
   // Basic IPv4 check and IPv6 presence detection.
@@ -41,7 +42,11 @@ function getParentDomain(hostname: string): string | undefined {
 
   // Return parent domain with leading dot (e.g., ".manuspre.computer")
   // This allows cookie to be shared across all subdomains
-  return "." + parts.slice(-2).join(".");
+  const parent = parts.slice(-2).join(".");
+  if (PUBLIC_SUFFIX_BLOCKLIST.has(parent)) {
+    return undefined;
+  }
+  return "." + parent;
 }
 
 export function getSessionCookieOptions(
