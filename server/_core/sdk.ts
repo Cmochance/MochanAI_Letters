@@ -3,7 +3,6 @@ import { ForbiddenError } from "../../shared/_core/errors";
 import axios, { type AxiosInstance } from "axios";
 import { parse as parseCookieHeader } from "cookie";
 import type { Request } from "express";
-import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
@@ -17,6 +16,14 @@ import type {
 // Utility function
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
+
+let joseImport: Promise<typeof import("jose")> | null = null;
+const getJose = async () => {
+  if (!joseImport) {
+    joseImport = import("jose");
+  }
+  return joseImport;
+};
 
 export type SessionPayload = {
   openId: string;
@@ -163,6 +170,7 @@ class SDKServer {
     payload: SessionPayload,
     options: { expiresInMs?: number } = {},
   ): Promise<string> {
+    const { SignJWT } = await getJose();
     const issuedAt = Date.now();
     const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
@@ -187,6 +195,7 @@ class SDKServer {
     }
 
     try {
+      const { jwtVerify } = await getJose();
       const secretKey = this.getSessionSecret();
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],

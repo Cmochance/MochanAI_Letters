@@ -49,6 +49,8 @@
 
 如果部署后访问 `/api/health` 变成 500（FUNCTION_INVOCATION_FAILED），通常是函数在冷启动时崩溃。一个常见原因是 Node/Vercel 对 TypeScript 源码的模块解析与本地开发不同：仓库内所有服务端内部引用已改为不带 `.js` 后缀，避免出现 `Cannot find module .../*.js` 导致的崩溃。更新后重新部署即可。
 
+如果日志里出现 `Error [ERR_REQUIRE_ESM]: require() of ES Module .../jose/... not supported`，说明函数被以 CommonJS 方式运行，但 `jose` 是 ESM-only。仓库已将 `jose` 的使用改为运行时动态 `import("jose")`，以兼容 CommonJS 的函数运行时；重新部署即可生效。
+
 ### 3.2 Vercel 环境变量（后端项目）
 
 在 Vercel 后端项目里配置（Production/Preview/Development 视情况同步）：
