@@ -52,8 +52,18 @@ export default function ChaptersScreen() {
             <TouchableOpacity onPress={() => router.back()}>
               <Text className="text-primary mb-2">← 返回</Text>
             </TouchableOpacity>
-            <Text className="text-3xl font-bold text-foreground">章节列表</Text>
-            <Text className="mt-1 text-muted">共 {chapters?.length || 0} 章</Text>
+            <View className="flex-row justify-between items-center">
+              <View>
+                <Text className="text-3xl font-bold text-foreground">章节列表</Text>
+                <Text className="mt-1 text-muted">共 {chapters?.length || 0} 章</Text>
+              </View>
+              <TouchableOpacity
+                className="bg-surface px-4 py-2 rounded-full border border-border active:opacity-70"
+                onPress={() => router.push(`/outline-view?novelId=${novelId}` as any)}
+              >
+                <Text className="text-primary font-semibold">📊 大纲</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Chapters List */}
