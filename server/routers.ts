@@ -8,6 +8,7 @@ import { vectorizeChapter } from "./services/rag";
 import { generateChapterOutline, expandChapterContent, countWords } from "./services/ai";
 import { exportToTXT, exportToMarkdown, generateExportFilename } from "./services/export";
 import { generateNovelCover } from "./services/cover";
+import { exportUserData, importUserData } from "./services/backup";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -193,6 +194,24 @@ export const appRouter = router({
         
         const filename = generateExportFilename(novel, "docx");
         return { content, filename };
+      }),
+  }),
+  
+  // Backup and sync
+  backup: router({
+    export: protectedProcedure.query(async ({ ctx }) => {
+      const data = await exportUserData(ctx.user.id);
+      return data;
+    }),
+    
+    import: protectedProcedure
+      .input(z.object({
+        novels: z.array(z.any()),
+        chapters: z.array(z.any()),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await importUserData(ctx.user.id, input);
+        return result;
       }),
   }),
   

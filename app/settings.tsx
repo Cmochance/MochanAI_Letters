@@ -1,4 +1,6 @@
-import { ScrollView, Text, View, TouchableOpacity, TextInput, Alert, ActivityIndicator } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
@@ -46,6 +48,50 @@ export default function SettingsScreen() {
 
     // Simple test
     Alert.alert("提示", "连接测试功能开发中");
+  };
+  
+  const exportBackupMutation = trpc.backup.export.useQuery(undefined, {
+    enabled: false,
+  });
+  
+  const handleExportBackup = async () => {
+    try {
+      const data = await exportBackupMutation.refetch();
+      if (!data.data) {
+        Alert.alert("错误", "导出失败");
+        return;
+      }
+      
+      const json = JSON.stringify(data.data, null, 2);
+      const filename = `mowen_backup_${new Date().toISOString().split('T')[0]}.json`;
+      
+      if (Platform.OS === "web") {
+        // Web: download file
+        const blob = new Blob([json], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        Alert.alert("成功", "备份已下载");
+      } else {
+        // Mobile: save and share
+        const fileUri = `${FileSystem.documentDirectory}${filename}`;
+        await FileSystem.writeAsStringAsync(fileUri, json);
+        await Sharing.shareAsync(fileUri);
+      }
+    } catch (error) {
+      Alert.alert("错误", "导出失败: " + (error as Error).message);
+    }
+  };
+  
+  const handleImportBackup = () => {
+    Alert.alert(
+      "导入备份",
+      "导入功能开发中。您可以在设备上使用文件管理器打开备份文件。",
+      [{ text: "确定" }]
+    );
   };
 
   if (isLoading) {
@@ -164,6 +210,45 @@ export default function SettingsScreen() {
           <View className="mt-6 bg-surface rounded-xl p-4 border border-border">
             <Text className="text-sm text-muted">
               💡 提示:如果不配置自定义 API,将使用内置的 AI 模型。配置后,AI 章节规划和内容扩写功能将使用您的 API。
+            </Text>
+          </View>
+          
+          {/* Backup Section */}
+          <View className="mt-8 pt-6 border-t border-border">
+            <Text className="text-2xl font-bold text-foreground font-title mb-4">
+              数据备份
+            </Text>
+            
+            <View className="bg-surface rounded-xl p-4 border border-border mb-4">
+              <View className="flex-row items-center mb-2">
+                <Text className="text-2xl mr-2">☁️</Text>
+                <Text className="text-foreground font-semibold">云端同步</Text>
+              </View>
+              <Text className="text-sm text-muted">
+                您的所有数据已自动保存到云端,登录同一账号即可在多个设备间同步访问。
+              </Text>
+            </View>
+            
+            <TouchableOpacity
+              className="bg-surface border border-border py-4 rounded-xl items-center active:opacity-70 mb-3"
+              onPress={handleExportBackup}
+            >
+              <Text className="text-foreground font-semibold text-base">
+                📦 导出本地备份
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              className="bg-surface border border-border py-4 rounded-xl items-center active:opacity-70"
+              onPress={handleImportBackup}
+            >
+              <Text className="text-foreground font-semibold text-base">
+                📥 导入备份数据
+              </Text>
+            </TouchableOpacity>
+            
+            <Text className="text-xs text-muted mt-3 text-center">
+              提示:备份文件为 JSON 格式,包含所有小说和章节数据
             </Text>
           </View>
         </View>
