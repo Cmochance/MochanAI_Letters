@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image } from "react-native";
 import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
@@ -80,25 +80,58 @@ export default function NovelsScreen() {
               {novels.map((novel) => (
                 <TouchableOpacity
                   key={novel.id}
-                  className="bg-surface rounded-2xl p-4 border border-border active:opacity-70"
+                  className="bg-surface rounded-2xl border border-border active:opacity-70 overflow-hidden"
                   onPress={() => router.push(`/novels/${novel.id}`)}
                   onLongPress={() => handleDeleteNovel(novel.id, novel.title)}
                 >
-                  <Text className="text-xl font-semibold text-foreground font-title mb-2">
-                    {novel.title}
-                  </Text>
-                  {novel.description && (
-                    <Text className="text-sm text-muted mb-3" numberOfLines={2}>
-                      {novel.description}
-                    </Text>
-                  )}
-                  <View className="flex-row items-center gap-4">
-                    <Text className="text-xs text-muted">
-                      {novel.totalWords.toLocaleString()} 字
-                    </Text>
-                    <Text className="text-xs text-muted">
-                      {new Date(novel.updatedAt).toLocaleDateString()}
-                    </Text>
+                  <View className="flex-row">
+                    {/* Cover Image */}
+                    {novel.coverUrl ? (
+                      <Image
+                        source={{ uri: novel.coverUrl }}
+                        style={{ width: 100, height: 140 }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View className="w-[100px] h-[140px] bg-background items-center justify-center">
+                        <Text className="text-4xl">📖</Text>
+                      </View>
+                    )}
+                    
+                    {/* Novel Info */}
+                    <View className="flex-1 p-4">
+                      <Text className="text-xl font-semibold text-foreground font-title mb-2">
+                        {novel.title}
+                      </Text>
+                      {novel.description && (
+                        <Text className="text-sm text-muted mb-3" numberOfLines={2}>
+                          {novel.description}
+                        </Text>
+                      )}
+                      <View className="flex-row items-center gap-4 mb-2">
+                        <Text className="text-xs text-muted">
+                          {novel.totalWords.toLocaleString()} 字
+                        </Text>
+                        <Text className="text-xs text-muted">
+                          {new Date(novel.createdAt).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      
+                      {/* Generate Cover Button */}
+                      {!novel.coverUrl && (
+                        <TouchableOpacity
+                          className="bg-primary/20 px-3 py-1.5 rounded-full self-start active:opacity-70"
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            router.push(`/generate-cover?novelId=${novel.id}&title=${encodeURIComponent(novel.title)}&description=${encodeURIComponent(novel.description || "")}` as any);
+                          }}
+                        >
+                          <Text className="text-primary text-xs font-semibold">
+                            ✨ 生成封面
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
                 </TouchableOpacity>
               ))}

@@ -7,6 +7,7 @@ import * as db from "./db";
 import { vectorizeChapter } from "./services/rag";
 import { generateChapterOutline, expandChapterContent, countWords } from "./services/ai";
 import { exportToTXT, exportToMarkdown, generateExportFilename } from "./services/export";
+import { generateNovelCover } from "./services/cover";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -43,6 +44,24 @@ export const appRouter = router({
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => db.deleteNovel(input.id)),
+    
+    generateCover: protectedProcedure
+      .input(z.object({
+        novelId: z.number(),
+        title: z.string(),
+        description: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { imageUrl } = await generateNovelCover({
+          title: input.title,
+          description: input.description,
+        });
+        
+        // Update novel with cover URL
+        await db.updateNovel(input.novelId, { coverUrl: imageUrl });
+        
+        return { coverUrl: imageUrl };
+      }),
   }),
   
   // Chapters management
