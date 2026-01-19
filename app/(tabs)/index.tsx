@@ -151,22 +151,7 @@ export default function NovelsScreen() {
             <TouchableOpacity
               className="bg-primary py-4 rounded-full items-center active:opacity-80"
               onPress={() => {
-                Alert.prompt(
-                  "新建小说",
-                  "请输入小说标题",
-                  [
-                    { text: "取消", style: "cancel" },
-                    {
-                      text: "创建",
-                      onPress: (title?: string) => {
-                        if (title?.trim()) {
-                          createNovelMutation.mutate({ title: title.trim() });
-                        }
-                      },
-                    },
-                  ],
-                  "plain-text"
-                );
+                setShowNewNovelDialog(true);
               }}
             >
               <Text className="text-background font-semibold text-lg">
@@ -176,6 +161,61 @@ export default function NovelsScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {showNewNovelDialog && (
+        <TouchableOpacity
+          activeOpacity={1}
+          className="absolute inset-0 bg-black/50 justify-center items-center px-6"
+          onPress={() => {
+            if (createNovelMutation.isPending) return;
+            setShowNewNovelDialog(false);
+            setNewNovelTitle("");
+          }}
+        >
+          <View
+            className="w-full max-w-md bg-background rounded-2xl p-5 border border-muted"
+            onStartShouldSetResponder={() => true}
+          >
+            <Text className="text-lg font-semibold text-foreground">新建小说</Text>
+            <Text className="text-sm text-muted mt-1">请输入小说标题</Text>
+
+            <TextInput
+              className="mt-4 w-full rounded-xl border border-muted px-4 py-3 text-foreground"
+              placeholder="例如：风起墨痕"
+              placeholderTextColor={colors.muted}
+              value={newNovelTitle}
+              autoFocus
+              editable={!createNovelMutation.isPending}
+              onChangeText={setNewNovelTitle}
+              onSubmitEditing={handleCreateNovel}
+              returnKeyType="done"
+            />
+
+            <View className="flex-row gap-3 mt-5">
+              <TouchableOpacity
+                className="flex-1 py-3 rounded-full items-center border border-muted active:opacity-80"
+                onPress={() => {
+                  if (createNovelMutation.isPending) return;
+                  setShowNewNovelDialog(false);
+                  setNewNovelTitle("");
+                }}
+              >
+                <Text className="text-foreground font-semibold">取消</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className="flex-1 py-3 rounded-full items-center bg-primary active:opacity-80"
+                onPress={handleCreateNovel}
+                disabled={createNovelMutation.isPending}
+              >
+                <Text className="text-background font-semibold">
+                  {createNovelMutation.isPending ? "创建中..." : "创建"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      )}
     </ScreenContainer>
   );
 }

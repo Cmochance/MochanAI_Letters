@@ -64,7 +64,7 @@
 - **Node.js** + **Express**: 服务器框架
 - **tRPC**: 端到端类型安全的 API
 - **Drizzle ORM**: 类型安全的数据库操作
-- **MySQL** + **pgvector**: 关系型数据库 + 向量存储
+- **PostgreSQL（Neon）**: 关系型数据库
 
 ### AI 集成
 - **OpenAI Embedding API**: 文本向量化
@@ -72,8 +72,8 @@
 - **RAG (Retrieval-Augmented Generation)**: 检索增强生成
 
 ### 数据存储
-- **Supabase**: PostgreSQL 云数据库
-- **S3**: 文件存储(封面图片)
+- **PostgreSQL（Neon）**: 结构化数据存储
+- **S3**: 文件存储(封面图片/附件，可选)
 - **AsyncStorage**: 本地缓存
 
 ## 📦 项目结构
@@ -111,7 +111,7 @@ novel_writer_app/
 ### 环境要求
 - Node.js 22+
 - pnpm 9+
-- MySQL 8.0+ (支持向量扩展)
+- PostgreSQL 16+
 
 ### 安装依赖
 ```bash
@@ -119,10 +119,11 @@ pnpm install
 ```
 
 ### 配置环境变量
-创建 `.env` 文件:
+创建 `.env` 文件（可直接复制并改写 [.env.example](file:///d:/Users/32162/Documents/GitHub/MochanAI_Letters/.env.example)）:
 ```env
-DATABASE_URL=mysql://user:password@host:port/database
-OPENAI_API_KEY=your_openai_api_key
+DATABASE_URL=postgresql://user:password@host:port/database
+JWT_SECRET=replace-with-a-long-random-string
+BUILT_IN_FORGE_API_KEY=your-forge-api-key
 ```
 
 ### 数据库迁移
@@ -141,6 +142,10 @@ pnpm test
 ```
 
 ## 📱 部署
+
+推荐按两条路径部署（文档更详细）：
+- 本地 Docker Compose 一键启动（前端 Web + 后端 + Postgres）：[DEPLOYMENT_LOCAL_DOCKER_COMPOSE.md](file:///d:/Users/32162/Documents/GitHub/MochanAI_Letters/DEPLOYMENT_LOCAL_DOCKER_COMPOSE.md)
+- 云端（Vercel 部署前后端 + Neon 部署数据库）：[DEPLOYMENT_CLOUD_VERCEL_NEON.md](file:///d:/Users/32162/Documents/GitHub/MochanAI_Letters/DEPLOYMENT_CLOUD_VERCEL_NEON.md)
 
 ### 移动端
 使用 Expo 构建原生应用:

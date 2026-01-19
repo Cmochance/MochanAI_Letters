@@ -1,26 +1,12 @@
 {
   "version": "7",
-  "dialect": "mysql",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "5",
-      "when": 1763372440610,
-      "tag": "0000_elite_eternals",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "5",
-      "when": 1768802178027,
-      "tag": "0001_ambitious_big_bertha",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1768807368001,
-      "tag": "0002_chubby_vermin",
+      "version": "7",
+      "when": 1768844692194,
+      "tag": "0000_pink_wendell_vaughn",
       "breakpoints": true
     }
   ]

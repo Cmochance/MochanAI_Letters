@@ -1,5 +1,6 @@
 import { eq, desc, and } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import { 
   InsertUser, 
   users, 
@@ -21,15 +22,20 @@ import {
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _pool: Pool | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+      });
+      _db = drizzle(_pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
+      _pool = null;
     }
   }
   return _db;
@@ -85,9 +91,13 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
+    await db
+      .insert(users)
+      .values(values)
+      .onConflictDoUpdate({
+        target: users.openId,
+        set: updateSet,
+      });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -127,15 +137,24 @@ export async function createNovel(data: InsertNovel): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result: any = await db.insert(novels).values(data);
-  return Number(result.insertId);
+  const [row] = await db.insert(novels).values(data).returning({ id: novels.id });
+  if (!row) {
+    throw new Error("Failed to create novel");
+  }
+  return row.id;
 }
 
 export async function updateNovel(novelId: number, data: Partial<InsertNovel>): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  await db.update(novels).set(data).where(eq(novels.id, novelId));
+  await db
+    .update(novels)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(novels.id, novelId));
 }
 
 export async function deleteNovel(novelId: number): Promise<void> {
@@ -179,18 +198,20 @@ export async function createChapter(data: InsertChapter): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result: any = await db.insert(chapters).values(data);
+  const [row] = await db.insert(chapters).values(data).returning({ id: chapters.id });
+  if (!row) {
+    throw new Error("Failed to create chapter");
+  }
   
   // Update novel's total words
   const novel = await getNovelById(data.novelId);
   if (novel) {
     await updateNovel(data.novelId, {
       totalWords: novel.totalWords + (data.wordCount || 0),
-      updatedAt: new Date(),
     });
   }
   
-  return Number(result.insertId);
+  return row.id;
 }
 
 export async function updateChapter(chapterId: number, data: Partial<InsertChapter>): Promise<void> {
@@ -200,7 +221,13 @@ export async function updateChapter(chapterId: number, data: Partial<InsertChapt
   // Get old chapter to calculate word count difference
   const oldChapter = await getChapterById(chapterId);
   
-  await db.update(chapters).set(data).where(eq(chapters.id, chapterId));
+  await db
+    .update(chapters)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(chapters.id, chapterId));
   
   // Update novel's total words if word count changed
   if (oldChapter && data.wordCount !== undefined && data.wordCount !== null) {
@@ -278,7 +305,13 @@ export async function upsertUserSettings(data: InsertUserSettings): Promise<void
   const existing = await getUserSettings(data.userId);
   
   if (existing) {
-    await db.update(userSettings).set(data).where(eq(userSettings.userId, data.userId));
+    await db
+      .update(userSettings)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(userSettings.userId, data.userId));
   } else {
     await db.insert(userSettings).values(data);
   }
@@ -301,16 +334,22 @@ export async function createNote(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result: any = await db.insert(notes).values({
+  const [row] = await db
+    .insert(notes)
+    .values({
     userId,
     title,
     content,
     category,
     novelId: novelId || null,
-  });
-  
-  const insertId = Number(result.insertId);
-  const note = await getNoteById(insertId);
+    })
+    .returning({ id: notes.id });
+
+  if (!row) {
+    throw new Error("Failed to create note");
+  }
+
+  const note = await getNoteById(row.id);
   if (!note) throw new Error("Failed to create note");
   return note;
 }
@@ -395,6 +434,7 @@ export async function updateNote(
       content,
       category,
       novelId: novelId === undefined ? null : novelId,
+      updatedAt: new Date(),
     })
     .where(eq(notes.id, noteId));
 }

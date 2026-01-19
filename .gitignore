@@ -31,7 +31,30 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
+.env.*
+!.env.example
 .env*.local
+
+# Vercel
+.vercel/
+
+# Test & coverage
+coverage/
+*.lcov
+
+# Tooling caches
+.turbo/
+.eslintcache
+.stylelintcache
+.parcel-cache/
+.vite/
+
+# pnpm
+.pnpm-store/
+
+# Trae IDE
+.trae/
 
 # typescript
 *.tsbuildinfo

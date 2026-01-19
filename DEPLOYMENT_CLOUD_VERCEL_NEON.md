@@ -1,0 +1,81 @@
+# 云端部署（Vercel + Neon）
+
+目标：
+- 使用 Vercel 部署前端（Web）
+- 使用 Vercel 部署后端（API）
+- 使用 Neon 部署数据库（Postgres）
+
+## 0. 重要前提：本仓库已切换为 Postgres
+
+当前代码与迁移工具链已默认使用 Postgres：
+- Drizzle 迁移配置：`dialect: "postgresql"`（见 [drizzle.config.ts](file:///d:/Users/32162/Documents/GitHub/MochanAI_Letters/drizzle.config.ts)）
+- 运行时数据库驱动：`pg` + `drizzle-orm/node-postgres`（见 [server/db.ts](file:///d:/Users/32162/Documents/GitHub/MochanAI_Letters/server/db.ts)）
+
+## 1. Neon：创建数据库并获取连接串
+
+1. 登录 Neon 控制台，创建 Project（Postgres）。
+2. 创建数据库（例如 `mochan`）。
+3. 复制连接串（Neon 会提供 `postgresql://...` 形式）。
+4. 在 Vercel 后端项目中设置环境变量 `DATABASE_URL`（使用 Neon 的连接串）。
+
+建议：优先使用 Neon 提供的 Pooled/Serverless 连接方式，避免在 Serverless 冷启动/并发下触发连接数问题。
+
+## 2. 迁移与建表（在 Neon 上应用 Drizzle 迁移）
+
+1. 在本地把 `DATABASE_URL` 指向 Neon（建议使用 Neon 的 pooled 连接串）。
+2. 运行迁移：
+   - `pnpm db:push`
+
+如果你之前已经在 MySQL 里有数据：该切换不会自动迁移历史数据；需要自行导出/导入（或写一次性迁移脚本）。
+
+## 3. Vercel：部署后端（API）
+
+### 3.1 关键点：Express 常驻服务 ≠ Vercel Serverless
+
+本仓库的后端入口是长驻进程（见 [server/_core/index.ts](file:///d:/Users/32162/Documents/GitHub/MochanAI_Letters/server/_core/index.ts)）。
+在 Vercel 上通常需要把 API 作为 Serverless Function 暴露出来（例如放到 `api/` 目录），并导出 handler。
+
+建议做法：
+- 本仓库已提供 Vercel Function 入口：`api/[...path].ts`
+- 该入口复用现有的 `appRouter/createContext`，并暴露：
+  - `/api/trpc`
+  - `/api/health`
+  -（以及 OAuth 相关的 `/api/oauth/*` 路由）
+
+### 3.2 Vercel 环境变量（后端项目）
+
+在 Vercel 后端项目里配置（Production/Preview/Development 视情况同步）：
+- `DATABASE_URL`（Neon Postgres 连接串）
+- `JWT_SECRET`
+- 若启用 OAuth：`VITE_APP_ID`、`OAUTH_SERVER_URL`、`VITE_OAUTH_PORTAL_URL`、`OWNER_OPEN_ID`、`OWNER_NAME`
+- 若启用 AI：`BUILT_IN_FORGE_API_URL`、`BUILT_IN_FORGE_API_KEY`
+
+### 3.3 验证
+
+- 打开后端域名，访问：`/api/health`
+- 前端联通验证：前端能请求 `/api/trpc` 并返回数据/错误码正常
+
+## 4. Vercel：部署前端（Expo Web）
+
+### 4.1 构建方式
+
+Expo Web 可以导出为静态资源，再由 Vercel 作为静态站点托管：
+- 构建命令（示例）：`pnpm install && npx expo export -p web`
+- 输出目录通常为 `dist`（如不一致，以构建日志为准）
+
+### 4.2 Vercel 环境变量（前端项目）
+
+前端使用 `EXPO_PUBLIC_*`，这些值会被打包进产物：
+- `EXPO_PUBLIC_API_BASE_URL=https://<你的后端项目>.vercel.app`
+- 若启用 OAuth：`EXPO_PUBLIC_OAUTH_PORTAL_URL`、`EXPO_PUBLIC_OAUTH_SERVER_URL`、`EXPO_PUBLIC_APP_ID`
+- 可选：`EXPO_PUBLIC_OWNER_OPEN_ID`、`EXPO_PUBLIC_OWNER_NAME`
+
+提示：前端 `.env` 读取逻辑在 [load-env.js](file:///d:/Users/32162/Documents/GitHub/MochanAI_Letters/scripts/load-env.js)。在 Vercel 上建议直接配置 `EXPO_PUBLIC_*`，避免混淆。
+
+## 5. OAuth / Cookie 的跨域注意事项（如启用登录）
+
+Web 登录如果依赖 Cookie，会遇到跨域与 SameSite 限制：
+- 最理想：前后端同域名（例如都在同一个域名下，通过反向代理把 `/api` 指到后端）
+- 若前后端是不同域：需要正确设置 Cookie 的 `SameSite=None; Secure`，并确保 HTTPS
+- 本仓库的 CORS 逻辑会回显 Origin 并允许 credentials（见 [server/_core/index.ts](file:///d:/Users/32162/Documents/GitHub/MochanAI_Letters/server/_core/index.ts)），但 Serverless 下仍需验证实际响应头是否符合浏览器策略
+
