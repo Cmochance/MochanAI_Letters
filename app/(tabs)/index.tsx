@@ -1,44 +1,144 @@
-import { ScrollView, Text, View, TouchableOpacity } from "react-native";
-
+import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
+import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
+import { trpc } from "@/lib/trpc";
+import { useState } from "react";
+import { useColors } from "@/hooks/use-colors";
 
-/**
- * Home Screen - NativeWind Example
- *
- * This template uses NativeWind (Tailwind CSS for React Native).
- * You can use familiar Tailwind classes directly in className props.
- *
- * Key patterns:
- * - Use `className` instead of `style` for most styling
- * - Theme colors: use tokens directly (bg-background, text-foreground, bg-primary, etc.); no dark: prefix needed
- * - Responsive: standard Tailwind breakpoints work on web
- * - Custom colors defined in tailwind.config.js
- */
-export default function HomeScreen() {
+export default function NovelsScreen() {
+  const colors = useColors();
+  const [showNewNovelDialog, setShowNewNovelDialog] = useState(false);
+  const [newNovelTitle, setNewNovelTitle] = useState("");
+  
+  const { data: novels, isLoading, refetch } = trpc.novels.list.useQuery();
+  const createNovelMutation = trpc.novels.create.useMutation({
+    onSuccess: () => {
+      refetch();
+      setShowNewNovelDialog(false);
+      setNewNovelTitle("");
+    },
+  });
+  const deleteNovelMutation = trpc.novels.delete.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  const handleCreateNovel = () => {
+    if (!newNovelTitle.trim()) {
+      Alert.alert("提示", "请输入小说标题");
+      return;
+    }
+    createNovelMutation.mutate({ title: newNovelTitle.trim() });
+  };
+
+  const handleDeleteNovel = (id: number, title: string) => {
+    Alert.alert(
+      "确认删除",
+      `确定要删除《${title}》吗?删除后无法恢复。`,
+      [
+        { text: "取消", style: "cancel" },
+        {
+          text: "删除",
+          style: "destructive",
+          onPress: () => deleteNovelMutation.mutate({ id }),
+        },
+      ]
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <ScreenContainer className="justify-center items-center">
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text className="mt-4 text-muted">加载中...</Text>
+      </ScreenContainer>
+    );
+  }
+
   return (
-    <ScreenContainer className="p-6">
+    <ScreenContainer className="p-4">
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 gap-8">
-          {/* Hero Section */}
-          <View className="items-center gap-2">
-            <Text className="text-4xl font-bold text-foreground">Welcome</Text>
-            <Text className="text-base text-muted text-center">
-              Edit app/(tabs)/index.tsx to get started
-            </Text>
+        <View className="flex-1">
+          {/* Header */}
+          <View className="mb-6">
+            <View className="flex-row justify-between items-center">
+              <View>
+                <Text className="text-3xl font-bold text-foreground">我的小说</Text>
+                <Text className="mt-1 text-muted">共 {novels?.length || 0} 部作品</Text>
+              </View>
+              <TouchableOpacity
+                className="w-10 h-10 rounded-full bg-surface items-center justify-center active:opacity-70"
+                onPress={() => router.push("/settings" as any)}
+              >
+                <Text className="text-xl">⚙️</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {/* Example Card */}
-          <View className="w-full max-w-sm self-center bg-surface rounded-2xl p-6 shadow-sm border border-border">
-            <Text className="text-lg font-semibold text-foreground mb-2">NativeWind Ready</Text>
-            <Text className="text-sm text-muted leading-relaxed">
-              Use Tailwind CSS classes directly in your React Native components.
-            </Text>
-          </View>
+          {/* Novels List */}
+          {novels && novels.length > 0 ? (
+            <View className="gap-4">
+              {novels.map((novel) => (
+                <TouchableOpacity
+                  key={novel.id}
+                  className="bg-surface rounded-2xl p-4 border border-border active:opacity-70"
+                  onPress={() => router.push(`/novels/${novel.id}`)}
+                  onLongPress={() => handleDeleteNovel(novel.id, novel.title)}
+                >
+                  <Text className="text-xl font-semibold text-foreground mb-2">
+                    {novel.title}
+                  </Text>
+                  {novel.description && (
+                    <Text className="text-sm text-muted mb-3" numberOfLines={2}>
+                      {novel.description}
+                    </Text>
+                  )}
+                  <View className="flex-row items-center gap-4">
+                    <Text className="text-xs text-muted">
+                      {novel.totalWords.toLocaleString()} 字
+                    </Text>
+                    <Text className="text-xs text-muted">
+                      {new Date(novel.updatedAt).toLocaleDateString()}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View className="flex-1 justify-center items-center py-20">
+              <Text className="text-6xl mb-4">📚</Text>
+              <Text className="text-lg text-foreground font-semibold mb-2">
+                还没有小说
+              </Text>
+              <Text className="text-sm text-muted">点击下方按钮创建第一部作品</Text>
+            </View>
+          )}
 
-          {/* Example Button */}
-          <View className="items-center">
-            <TouchableOpacity className="bg-primary px-6 py-3 rounded-full active:opacity-80">
-              <Text className="text-background font-semibold">Get Started</Text>
+          {/* Create Button */}
+          <View className="mt-6">
+            <TouchableOpacity
+              className="bg-primary py-4 rounded-full items-center active:opacity-80"
+              onPress={() => {
+                Alert.prompt(
+                  "新建小说",
+                  "请输入小说标题",
+                  [
+                    { text: "取消", style: "cancel" },
+                    {
+                      text: "创建",
+                      onPress: (title?: string) => {
+                        if (title?.trim()) {
+                          createNovelMutation.mutate({ title: title.trim() });
+                        }
+                      },
+                    },
+                  ],
+                  "plain-text"
+                );
+              }}
+            >
+              <Text className="text-background font-semibold text-lg">
+                {createNovelMutation.isPending ? "创建中..." : "+ 新建小说"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
