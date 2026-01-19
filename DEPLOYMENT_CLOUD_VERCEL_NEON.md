@@ -68,18 +68,55 @@
 
 ### 4.1 构建方式
 
-Expo Web 可以导出为静态资源，再由 Vercel 作为静态站点托管：
-- 构建命令（示例）：`pnpm install && npx expo export -p web`
-- 输出目录通常为 `dist`（如不一致，以构建日志为准）
+前端推荐单独建一个 Vercel 项目（“前端项目”），把 Expo Web 导出为静态资源后由 Vercel 托管。
+
+1. 在 Vercel 新建项目
+   - Import Git Repository：选择本仓库
+   - Root Directory：保持为空（仓库根目录）
+   - Framework Preset：选 `Other`
+
+2. 配置 Build & Output Settings（前端项目）
+   - Install Command：`pnpm install --frozen-lockfile`
+   - Build Command：`pnpm build:web`
+   - Output Directory：`dist`
+   - Node.js Version：建议 18+（与默认一致即可）
+
+3. 部署并校验静态产物
+   - 部署完成后，Vercel 会从 `dist/` 提供静态站点
+   - 如果你在 Build Logs 里看到输出目录不是 `dist`，就把 Output Directory 改成日志里实际的目录名
+
+提示：本仓库的 `package.json` 里的 `pnpm run build` 是给后端打包（`dist/index.js`）用的，不适合作为前端项目的 Build Command。
 
 ### 4.2 Vercel 环境变量（前端项目）
 
-前端使用 `EXPO_PUBLIC_*`，这些值会被打包进产物：
-- `EXPO_PUBLIC_API_BASE_URL=https://<你的后端项目>.vercel.app`
-- 若启用 OAuth：`EXPO_PUBLIC_OAUTH_PORTAL_URL`、`EXPO_PUBLIC_OAUTH_SERVER_URL`、`EXPO_PUBLIC_APP_ID`
-- 可选：`EXPO_PUBLIC_OWNER_OPEN_ID`、`EXPO_PUBLIC_OWNER_NAME`
+在前端项目的 Environment Variables（Production/Preview/Development 视情况同步）里配置：
+- `EXPO_PUBLIC_API_BASE_URL`
+  - 如果你把后端单独部署在另一个 Vercel 项目：填 `https://<你的后端域名>`（例如 `https://mochan-ai-letters-back.vercel.app`）
+  - 如果你打算前后端同域（推荐）：把前端请求改为相对路径 `/api`（或把该值填前端同域名，确保走同域的 `/api/*`）
+- 若启用 OAuth：
+  - `EXPO_PUBLIC_OAUTH_PORTAL_URL`
+  - `EXPO_PUBLIC_OAUTH_SERVER_URL`
+  - `EXPO_PUBLIC_APP_ID`
+- 可选：
+  - `EXPO_PUBLIC_OWNER_OPEN_ID`
+  - `EXPO_PUBLIC_OWNER_NAME`
 
 提示：前端 `.env` 读取逻辑在 [load-env.js](file:///d:/Users/32162/Documents/GitHub/MochanAI_Letters/scripts/load-env.js)。在 Vercel 上建议直接配置 `EXPO_PUBLIC_*`，避免混淆。
+
+### 4.3 常见问题：刷新子路由 404
+
+如果你使用 Expo Router，并且在页面内路由跳转正常，但“刷新某个子路径”出现 404，通常是静态托管缺少 fallback。
+
+做法：在仓库根目录添加 `vercel.json`（注意：同仓库的所有 Vercel 项目都会读取它），加入以下 rewrites（保留 `/api/*`，其余重写到 `index.html`），然后重新部署：
+
+```json
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
+```
 
 ## 5. OAuth / Cookie 的跨域注意事项（如启用登录）
 

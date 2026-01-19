@@ -43,6 +43,7 @@ export function getApiBaseUrl(): string {
     if (apiHostname !== hostname) {
       return `${protocol}//${apiHostname}`;
     }
+    return `${protocol}//${hostname}`;
   }
 
   // Fallback to empty (will use relative URL)
