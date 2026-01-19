@@ -6,7 +6,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import { vectorizeChapter } from "./services/rag";
 import { generateChapterOutline, expandChapterContent, countWords } from "./services/ai";
-import { exportToTXT, exportToMarkdown, generateExportFilename } from "./services/export";
+import { exportToTXT, exportToMarkdown, generateExportFilename, exportToEPub } from "./services/export";
 import { generateNovelCover } from "./services/cover";
 import { exportUserData, importUserData } from "./services/backup";
 
@@ -191,9 +191,22 @@ export const appRouter = router({
         const content = await exportToMarkdown(input.novelId);
         const novel = await db.getNovelById(input.novelId);
         if (!novel) throw new Error("Novel not found");
-        
-        const filename = generateExportFilename(novel, "docx");
+        const timestamp = new Date().toISOString().split("T")[0];
+        const sanitizedTitle = novel.title.replace(/[^\w\u4e00-\u9fa5]/g, "_");
+        const filename = `${sanitizedTitle}_${timestamp}.md`;
         return { content, filename };
+      }),
+      
+    epub: protectedProcedure
+      .input(z.object({ novelId: z.number() }))
+      .mutation(async ({ input }) => {
+        const buffer = await exportToEPub(input.novelId);
+        const novel = await db.getNovelById(input.novelId);
+        if (!novel) throw new Error("Novel not found");
+        const filename = `${novel.title.replace(/[^\w\u4e00-\u9fa5]/g, "_")}_${new Date().toISOString().split("T")[0]}.epub`;
+        // Convert buffer to base64 for transmission
+        const base64 = buffer.toString('base64');
+        return { content: base64, filename };
       }),
   }),
   

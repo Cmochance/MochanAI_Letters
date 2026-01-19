@@ -33,6 +33,7 @@
     "cookie": "^1.1.1",
     "dotenv": "^16.6.1",
     "drizzle-orm": "^0.44.7",
+    "epub-gen-memory": "^1.1.2",
     "expo": "~54.0.29",
     "expo-audio": "~1.1.0",
     "expo-build-properties": "^1.0.10",

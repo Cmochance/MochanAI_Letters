@@ -103,3 +103,56 @@ export async function getExportInfo(novelId: number) {
     updatedAt: novel.updatedAt,
   };
 }
+
+/**
+ * Export novel to ePub format
+ */
+export async function exportToEPub(novelId: number): Promise<Buffer> {
+  const EPub = require('epub-gen-memory');
+  
+  const novel = await db.getNovelById(novelId);
+  if (!novel) {
+    throw new Error("Novel not found");
+  }
+
+  const chapters = await db.getNovelChapters(novelId);
+  
+  const content = chapters.map((chapter) => ({
+    title: `第 ${chapter.chapterNumber} 章 ${chapter.title}`,
+    data: `<h1>第 ${chapter.chapterNumber} 章 ${chapter.title}</h1>${chapter.content.split('\n').map(p => p.trim() ? `<p>${p}</p>` : '<br/>').join('')}`,
+  }));
+
+  const options = {
+    title: novel.title,
+    author: '墨文作者',
+    description: novel.description || '由墨文创作',
+    content,
+    lang: 'zh',
+    css: `
+      body {
+        font-family: serif;
+        line-height: 1.8;
+        text-align: justify;
+      }
+      h1 {
+        text-align: center;
+        margin: 2em 0;
+        font-size: 1.5em;
+      }
+      p {
+        text-indent: 2em;
+        margin: 0.5em 0;
+      }
+    `,
+  };
+
+  return new Promise((resolve, reject) => {
+    new EPub(options, (err: Error, content: Buffer) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(content);
+      }
+    });
+  });
+}

@@ -13,15 +13,16 @@ export default function ExportScreen() {
   const id = parseInt(novelId);
 
   const [exporting, setExporting] = useState(false);
-  const [exportFormat, setExportFormat] = useState<"txt" | "markdown" | null>(null);
+  const [exportFormat, setExportFormat] = useState<"txt" | "markdown" | "epub" | null>(null);
 
   const { data: novels } = trpc.novels.list.useQuery();
   const exportTxtMutation = trpc.export.txt.useMutation();
   const exportMarkdownMutation = trpc.export.markdown.useMutation();
+  const exportEpubMutation = trpc.export.epub.useMutation();
 
   const currentNovel = novels?.find((n) => n.id === id);
 
-  const handleExport = async (format: "txt" | "markdown" | "pdf") => {
+  const handleExport = async (format: "txt" | "markdown" | "pdf" | "epub") => {
     setExporting(true);
     setExportFormat(format === "pdf" ? "markdown" : format);
 
@@ -33,6 +34,43 @@ export default function ExportScreen() {
         const result = await exportTxtMutation.mutateAsync({ novelId: id });
         content = result.content;
         filename = result.filename;
+      } else if (format === "epub") {
+        // ePub format returns base64 encoded buffer
+        const result = await exportEpubMutation.mutateAsync({ novelId: id });
+        const buffer = Buffer.from(result.content, 'base64');
+        filename = result.filename;
+        
+        // Save to file system
+        const fileUri = `${FileSystem.documentDirectory}${filename}`;
+        await FileSystem.writeAsStringAsync(fileUri, result.content, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        // Share the file
+        if (Platform.OS === "web") {
+          // Web: download file
+          const blob = new Blob([buffer], { type: "application/epub+zip" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = filename;
+          link.click();
+          URL.revokeObjectURL(url);
+          
+          Alert.alert("成功", `已下载 ${filename}`);
+        } else {
+          // Mobile: share file
+          const canShare = await Sharing.isAvailableAsync();
+          if (canShare) {
+            await Sharing.shareAsync(fileUri);
+          } else {
+            Alert.alert("成功", `文件已保存到:\n${fileUri}`);
+          }
+        }
+        
+        setExporting(false);
+        setExportFormat(null);
+        return;
       } else {
         // For markdown and PDF, use markdown export
         const result = await exportMarkdownMutation.mutateAsync({ novelId: id });
@@ -150,6 +188,26 @@ export default function ExportScreen() {
               </View>
             </TouchableOpacity>
 
+            {/* ePub Format */}
+            <TouchableOpacity
+              className="bg-surface rounded-xl p-4 border border-border active:opacity-70"
+              onPress={() => handleExport("epub")}
+              disabled={exporting}
+            >
+              <View className="flex-row items-center gap-3">
+                <View className="w-12 h-12 rounded-full bg-primary/20 items-center justify-center">
+                  <Text className="text-2xl">📖</Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-lg font-semibold text-foreground font-title mb-1">ePub 电子书</Text>
+                  <Text className="text-sm text-muted">适用于 Kindle, Apple Books 等阅读设备</Text>
+                </View>
+                {exporting && exportFormat === "epub" && (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                )}
+              </View>
+            </TouchableOpacity>
+            
             {/* PDF Format (Coming Soon) */}
             <View className="bg-surface rounded-xl p-4 border border-border opacity-50">
               <View className="flex-row items-center gap-3">
