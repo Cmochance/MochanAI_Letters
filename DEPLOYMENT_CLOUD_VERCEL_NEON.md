@@ -42,6 +42,11 @@
   - `/api/health`
   -（以及 OAuth 相关的 `/api/oauth/*` 路由）
 
+重要：Vercel 后端项目的 `Root Directory` 需要保持为空（仓库根目录）。  
+如果把 `Root Directory` 设为 `api/`，那么 `api/[...path].ts` 会变成部署根目录下的 `[...path].ts`，URL 将不再是 `/api/*`，从而出现 `/api/health` 404。
+
+另外：如果你看到构建报错 `No Output Directory named "public"`，说明该 Vercel 项目被当作“需要产出静态目录”的项目在构建。仓库已提供 `public/` 目录用于满足默认的 Output Directory（也可以在 Vercel 项目设置里把 Output Directory 改为你需要的目录）。
+
 ### 3.2 Vercel 环境变量（后端项目）
 
 在 Vercel 后端项目里配置（Production/Preview/Development 视情况同步）：
