@@ -7,6 +7,7 @@ import {
   chapters, 
   chapterEmbeddings, 
   userSettings,
+  notes,
   InsertNovel,
   InsertChapter,
   InsertChapterEmbedding,
@@ -14,7 +15,8 @@ import {
   Novel,
   Chapter,
   ChapterEmbedding,
-  UserSettings
+  UserSettings,
+  Note
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -280,4 +282,129 @@ export async function upsertUserSettings(data: InsertUserSettings): Promise<void
   } else {
     await db.insert(userSettings).values(data);
   }
+}
+
+// ============================================================================
+// Notes Operations
+// ============================================================================
+
+/**
+ * Create a new note
+ */
+export async function createNote(
+  userId: number,
+  title: string,
+  content: string,
+  category: "inspiration" | "character" | "worldview" | "plot" | "other",
+  novelId?: number
+): Promise<Note> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result: any = await db.insert(notes).values({
+    userId,
+    title,
+    content,
+    category,
+    novelId: novelId || null,
+  });
+  
+  const insertId = Number(result.insertId);
+  const note = await getNoteById(insertId);
+  if (!note) throw new Error("Failed to create note");
+  return note;
+}
+
+/**
+ * Get all notes for a user
+ */
+export async function getUserNotes(userId: number): Promise<Note[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db
+    .select()
+    .from(notes)
+    .where(eq(notes.userId, userId))
+    .orderBy(desc(notes.updatedAt));
+}
+
+/**
+ * Get notes by category
+ */
+export async function getNotesByCategory(
+  userId: number,
+  category: "inspiration" | "character" | "worldview" | "plot" | "other"
+): Promise<Note[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db
+    .select()
+    .from(notes)
+    .where(and(eq(notes.userId, userId), eq(notes.category, category)))
+    .orderBy(desc(notes.updatedAt));
+}
+
+/**
+ * Get notes linked to a novel
+ */
+export async function getNovelNotes(novelId: number): Promise<Note[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db
+    .select()
+    .from(notes)
+    .where(eq(notes.novelId, novelId))
+    .orderBy(desc(notes.updatedAt));
+}
+
+/**
+ * Get a single note by ID
+ */
+export async function getNoteById(noteId: number): Promise<Note | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db
+    .select()
+    .from(notes)
+    .where(eq(notes.id, noteId))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Update a note
+ */
+export async function updateNote(
+  noteId: number,
+  title: string,
+  content: string,
+  category: "inspiration" | "character" | "worldview" | "plot" | "other",
+  novelId?: number | null
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db
+    .update(notes)
+    .set({
+      title,
+      content,
+      category,
+      novelId: novelId === undefined ? null : novelId,
+    })
+    .where(eq(notes.id, noteId));
+}
+
+/**
+ * Delete a note
+ */
+export async function deleteNote(noteId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(notes).where(eq(notes.id, noteId));
 }

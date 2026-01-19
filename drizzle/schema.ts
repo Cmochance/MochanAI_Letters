@@ -94,3 +94,20 @@ export const userSettings = mysqlTable("user_settings", {
 
 export type UserSettings = typeof userSettings.$inferSelect;
 export type InsertUserSettings = typeof userSettings.$inferInsert;
+
+/**
+ * Notes table - stores inspiration notes
+ */
+export const notes = mysqlTable("notes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  novelId: int("novelId"), // Optional: link to a specific novel
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  category: mysqlEnum("category", ["inspiration", "character", "worldview", "plot", "other"]).default("inspiration").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Note = typeof notes.$inferSelect;
+export type InsertNote = typeof notes.$inferInsert;

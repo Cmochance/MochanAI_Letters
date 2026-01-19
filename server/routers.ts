@@ -9,6 +9,7 @@ import { generateChapterOutline, expandChapterContent, countWords } from "./serv
 import { exportToTXT, exportToMarkdown, generateExportFilename, exportToEPub } from "./services/export";
 import { generateNovelCover } from "./services/cover";
 import { exportUserData, importUserData } from "./services/backup";
+import * as notesService from "./services/notes";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -208,6 +209,50 @@ export const appRouter = router({
         const base64 = buffer.toString('base64');
         return { content: base64, filename };
       }),
+  }),
+  
+  // Notes management
+  notes: router({
+    list: protectedProcedure.query(({ ctx }) => notesService.getUserNotes(ctx.user.id)),
+    
+    byCategory: protectedProcedure
+      .input(z.object({ category: z.enum(["inspiration", "character", "worldview", "plot", "other"]) }))
+      .query(({ ctx, input }) => notesService.getNotesByCategory(ctx.user.id, input.category)),
+    
+    byNovel: protectedProcedure
+      .input(z.object({ novelId: z.number() }))
+      .query(({ input }) => notesService.getNovelNotes(input.novelId)),
+    
+    getById: protectedProcedure
+      .input(z.object({ noteId: z.number() }))
+      .query(({ input }) => notesService.getNoteById(input.noteId)),
+    
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string(),
+        content: z.string(),
+        category: z.enum(["inspiration", "character", "worldview", "plot", "other"]),
+        novelId: z.number().optional(),
+      }))
+      .mutation(({ ctx, input }) => 
+        notesService.createNote(ctx.user.id, input.title, input.content, input.category, input.novelId)
+      ),
+    
+    update: protectedProcedure
+      .input(z.object({
+        noteId: z.number(),
+        title: z.string(),
+        content: z.string(),
+        category: z.enum(["inspiration", "character", "worldview", "plot", "other"]),
+        novelId: z.number().optional().nullable(),
+      }))
+      .mutation(({ input }) => 
+        notesService.updateNote(input.noteId, input.title, input.content, input.category, input.novelId)
+      ),
+    
+    delete: protectedProcedure
+      .input(z.object({ noteId: z.number() }))
+      .mutation(({ input }) => notesService.deleteNote(input.noteId)),
   }),
   
   // Backup and sync
