@@ -1,14 +1,14 @@
 /** @type {const} */
 const themeColors = {
-  primary: { light: '#7C3AED', dark: '#A78BFA' },
-  background: { light: '#ffffff', dark: '#151718' },
-  surface: { light: '#f5f5f5', dark: '#1e2022' },
-  foreground: { light: '#11181C', dark: '#ECEDEE' },
-  muted: { light: '#687076', dark: '#9BA1A6' },
-  border: { light: '#E5E7EB', dark: '#334155' },
-  success: { light: '#22C55E', dark: '#4ADE80' },
-  warning: { light: '#F59E0B', dark: '#FBBF24' },
-  error: { light: '#EF4444', dark: '#F87171' },
+  primary: { light: '#C8504D', dark: '#C8504D' },        // 朱砂红
+  background: { light: '#F5F1E8', dark: '#1C1C1C' },    // 米白色 / 深墨色
+  surface: { light: '#FDFCF8', dark: '#2C2C2C' },       // 浅米色 / 墨灰色
+  foreground: { light: '#2C2C2C', dark: '#E8E5DC' },    // 墨黑色 / 米白文字
+  muted: { light: '#8B8680', dark: '#A8A39A' },         // 灰色调
+  border: { light: '#D9D4C8', dark: '#4A4A4A' },        // 浅灰边框
+  success: { light: '#6B8E23', dark: '#9ACD32' },       // 竹青色
+  warning: { light: '#D4A574', dark: '#E6C79C' },       // 土黄色
+  error: { light: '#C8504D', dark: '#E67373' },         // 朱砂红
 };
 
 module.exports = { themeColors };
