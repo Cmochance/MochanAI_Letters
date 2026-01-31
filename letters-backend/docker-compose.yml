@@ -1,23 +1,35 @@
-version: "3.8"
-
 services:
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: letters-api
     ports:
-      - "3000:3000"
+      - "${PORT:-30080}:30080"
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
-      - PORT=3000
-      - DATABASE_URL=${DATABASE_URL}
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
-      - JWT_SECRET=${JWT_SECRET}
-      - BUILT_IN_FORGE_API_KEY=${BUILT_IN_FORGE_API_KEY}
-      - BUILT_IN_FORGE_BASE_URL=${BUILT_IN_FORGE_BASE_URL}
-      - CORS_ORIGIN=${CORS_ORIGIN}
+      - PORT=30080
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:30080/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+networks:
+  default:
+    name: letters-network

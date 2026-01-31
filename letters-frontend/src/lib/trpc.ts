@@ -13,7 +13,7 @@ function getBaseUrl() {
     return process.env.NEXT_PUBLIC_API_URL || "";
   }
   // SSR should use absolute URL
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:30080";
 }
 
 export const trpcClient = trpc.createClient({

@@ -24,13 +24,16 @@ interface LLMResponse {
 export async function invokeLLM(options: LLMOptions): Promise<LLMResponse> {
   const apiKey = process.env.BUILT_IN_FORGE_API_KEY;
   const baseUrl =
-    process.env.BUILT_IN_FORGE_BASE_URL || "https://api.openai.com";
+    process.env.BUILT_IN_FORGE_BASE_URL || "https://api.openai.com/v1";
 
   if (!apiKey) {
     throw new Error("BUILT_IN_FORGE_API_KEY is not configured");
   }
 
-  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+  // Ensure baseUrl ends with /v1 for OpenAI compatibility
+  const normalizedBaseUrl = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+
+  const response = await fetch(`${normalizedBaseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -45,7 +48,8 @@ export async function invokeLLM(options: LLMOptions): Promise<LLMResponse> {
   });
 
   if (!response.ok) {
-    throw new Error(`LLM API call failed: ${response.statusText}`);
+    const errorText = await response.text().catch(() => "Unknown error");
+    throw new Error(`LLM API call failed: ${response.status} - ${errorText}`);
   }
 
   return response.json();
@@ -60,7 +64,9 @@ export async function callUserAPI(
   baseUrl: string,
   model: string
 ): Promise<string> {
-  const url = `${baseUrl}/v1/chat/completions`;
+  // Ensure baseUrl ends with /v1 for OpenAI compatibility
+  const normalizedBaseUrl = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+  const url = `${normalizedBaseUrl}/chat/completions`;
 
   const response = await fetch(url, {
     method: "POST",
@@ -76,7 +82,8 @@ export async function callUserAPI(
   });
 
   if (!response.ok) {
-    throw new Error(`API call failed: ${response.statusText}`);
+    const errorText = await response.text().catch(() => "Unknown error");
+    throw new Error(`API call failed: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();

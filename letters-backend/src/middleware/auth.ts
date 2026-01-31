@@ -3,11 +3,24 @@ import type { Request, Response, NextFunction } from "express";
 import * as db from "../db/queries.js";
 import type { User } from "../db/schema.js";
 
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!;
+// Initialize Supabase client lazily
+let supabase: ReturnType<typeof createClient> | null = null;
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+function getSupabaseClient() {
+  if (!supabase) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error(
+        "SUPABASE_URL and SUPABASE_SERVICE_KEY must be configured"
+      );
+    }
+
+    supabase = createClient(supabaseUrl, supabaseServiceKey);
+  }
+  return supabase;
+}
 
 // Extend Express Request type
 declare global {
@@ -37,6 +50,7 @@ export async function authMiddleware(
     }
 
     const token = authHeader.substring(7);
+    const supabase = getSupabaseClient();
 
     // Verify token with Supabase
     const {
@@ -55,7 +69,7 @@ export async function authMiddleware(
 
     if (!user) {
       // Create new user
-      const userId = await db.createUser({
+      await db.createUser({
         supabaseId: supabaseUser.id,
         email: supabaseUser.email,
         name: supabaseUser.user_metadata?.name || supabaseUser.email?.split("@")[0],

@@ -7,7 +7,7 @@ import { createContext } from "./context.js";
 import { authMiddleware, getUserFromRequest } from "./middleware/auth.js";
 
 const app = express();
-const port = parseInt(process.env.PORT || "3000");
+const port = parseInt(process.env.PORT || "30080");
 
 // CORS configuration
 const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:3001";
