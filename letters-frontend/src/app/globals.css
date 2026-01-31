@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 水墨风格基础样式 */
+@layer base {
+  :root {
+    --color-primary: #C8504D;
+    --color-background: #F5F1E8;
+    --color-surface: #FDFCF8;
+    --color-foreground: #2C2C2C;
+    --color-muted: #8B8680;
+    --color-border: #D9D4C8;
+    --color-success: #6B8E23;
+    --color-warning: #D4A574;
+    --color-error: #C8504D;
+  }
+
+  .dark {
+    --color-background: #1C1C1C;
+    --color-surface: #2C2C2C;
+    --color-foreground: #E8E5DC;
+    --color-muted: #A8A39A;
+    --color-border: #4A4A4A;
+    --color-success: #9ACD32;
+    --color-warning: #E6C79C;
+    --color-error: #E67373;
+  }
+
+  html {
+    font-family: "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+}
+
+@layer components {
+  /* 水墨风格按钮 */
+  .btn-primary {
+    @apply px-6 py-3 bg-primary text-white rounded-lg font-medium
+           transition-all duration-200 hover:opacity-90 active:scale-95
+           shadow-sm hover:shadow-md;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 bg-surface text-foreground rounded-lg font-medium
+           border border-border transition-all duration-200
+           hover:bg-muted/10 active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 text-foreground rounded-lg font-medium
+           transition-all duration-200 hover:bg-muted/10 active:scale-95;
+  }
+
+  /* 水墨风格卡片 */
+  .card {
+    @apply bg-surface rounded-xl border border-border p-6
+           shadow-sm transition-shadow duration-200 hover:shadow-md;
+  }
+
+  /* 水墨风格输入框 */
+  .input {
+    @apply w-full px-4 py-3 bg-background border border-border rounded-lg
+           text-foreground placeholder:text-muted
+           focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
+           transition-all duration-200;
+  }
+
+  .textarea {
+    @apply w-full px-4 py-3 bg-background border border-border rounded-lg
+           text-foreground placeholder:text-muted resize-none
+           focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
+           transition-all duration-200 min-h-[120px];
+  }
+
+  /* 水墨风格标签 */
+  .tag {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm
+           bg-muted/10 text-muted border border-border;
+  }
+
+  .tag-primary {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm
+           bg-primary/10 text-primary border border-primary/20;
+  }
+
+  /* 页面容器 */
+  .page-container {
+    @apply min-h-screen bg-background;
+  }
+
+  .content-container {
+    @apply max-w-4xl mx-auto px-4 py-8;
+  }
+
+  /* 标题样式 */
+  .page-title {
+    @apply text-2xl font-serif font-bold text-foreground mb-6;
+  }
+
+  .section-title {
+    @apply text-xl font-serif font-semibold text-foreground mb-4;
+  }
+}
+
+@layer utilities {
+  /* 水墨渐变效果 */
+  .ink-gradient {
+    background: linear-gradient(
+      135deg,
+      var(--color-background) 0%,
+      var(--color-surface) 100%
+    );
+  }
+
+  /* 文字省略 */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* 滚动条样式 */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--color-border);
+    border-radius: 3px;
+  }
+}
