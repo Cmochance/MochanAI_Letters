@@ -1,4 +1,2 @@
-# Exclude Next.js proxy file to avoid conflict with middleware.
-letters-frontend/src/proxy.ts
-letters-frontend/src/proxy.js
-letters-frontend/src/proxy.mjs
+# Exclude backup folder
+.backup/
