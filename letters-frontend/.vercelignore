@@ -1,4 +1,4 @@
-# Exclude deprecated Next.js middleware file; use proxy instead.
-src/middleware.ts
-src/middleware.js
-src/middleware.mjs
+# Exclude Next.js proxy file to avoid conflict with middleware.
+src/proxy.ts
+src/proxy.js
+src/proxy.mjs
