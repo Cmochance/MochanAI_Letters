@@ -1,0 +1,4 @@
+# Exclude deprecated Next.js middleware file; use proxy instead.
+letters-frontend/src/middleware.ts
+letters-frontend/src/middleware.js
+letters-frontend/src/middleware.mjs
