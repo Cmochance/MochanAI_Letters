@@ -37,8 +37,14 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      await signUpWithEmail(email, password, name);
-      setSuccess(true);
+      const { session } = await signUpWithEmail(email, password, name);
+      // If email confirmation is disabled, user will be logged in immediately
+      if (session) {
+        router.push("/");
+      } else {
+        // Email confirmation is enabled, show success message
+        setSuccess(true);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : tc("error");
       setError(message);
