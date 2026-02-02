@@ -231,7 +231,7 @@ export async function searchSimilarChunks(
     LIMIT ${limit}
   `);
 
-  return result.rows as Array<{
+  return result as Array<{
     id: number;
     chapter_id: number;
     novel_id: number;
