@@ -38,10 +38,13 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Protected routes - redirect to login if not authenticated
-  const protectedPaths = ["/novels", "/chapters", "/notes", "/settings", "/ai-"];
-  const isProtectedPath = protectedPaths.some((path) =>
-    request.nextUrl.pathname.startsWith(path)
-  );
+  const protectedPaths = ["/", "/novels", "/chapters", "/notes", "/settings", "/ai-", "/export"];
+  const isProtectedPath = protectedPaths.some((path) => {
+    if (path === "/") {
+      return request.nextUrl.pathname === "/";
+    }
+    return request.nextUrl.pathname.startsWith(path);
+  });
 
   if (isProtectedPath && !user) {
     const url = request.nextUrl.clone();
