@@ -25,6 +25,7 @@ export async function invokeLLM(options: LLMOptions): Promise<LLMResponse> {
   const apiKey = process.env.BUILT_IN_FORGE_API_KEY;
   const baseUrl =
     process.env.BUILT_IN_FORGE_BASE_URL || "https://api.openai.com/v1";
+  const model = process.env.BUILT_IN_FORGE_MODEL || "gpt-4";
 
   if (!apiKey) {
     throw new Error("BUILT_IN_FORGE_API_KEY is not configured");
@@ -40,7 +41,7 @@ export async function invokeLLM(options: LLMOptions): Promise<LLMResponse> {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-4",
+      model,
       messages: options.messages,
       temperature: options.temperature ?? 0.7,
       max_tokens: options.maxTokens ?? 4096,
