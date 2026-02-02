@@ -4,7 +4,8 @@ import * as schema from "./schema.js";
 
 // Create postgres connection lazily
 let client: ReturnType<typeof postgres> | null = null;
-let drizzleInstance: ReturnType<typeof drizzle<typeof schema>> | null = null;
+type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
+let drizzleInstance: DrizzleDb | null = null;
 
 function getConnectionString(): string {
   const connectionString = process.env.DATABASE_URL;
@@ -26,9 +27,9 @@ export function getDb() {
 }
 
 // For backward compatibility, export db as a getter
-export const db = new Proxy({} as ReturnType<typeof drizzle<typeof schema>>, {
+export const db = new Proxy({} as DrizzleDb, {
   get(_, prop) {
-    return (getDb() as Record<string | symbol, unknown>)[prop];
+    return Reflect.get(getDb() as DrizzleDb, prop);
   },
 });
 
