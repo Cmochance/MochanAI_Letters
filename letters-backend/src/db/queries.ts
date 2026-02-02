@@ -231,14 +231,14 @@ export async function searchSimilarChunks(
     LIMIT ${limit}
   `);
 
-  return result as Array<{
-    id: number;
-    chapter_id: number;
-    novel_id: number;
-    content_chunk: string;
-    chunk_index: number;
-    similarity: number;
-  }>;
+  return result.map((row) => ({
+    id: Number(row.id),
+    chapter_id: Number(row.chapter_id),
+    novel_id: Number(row.novel_id),
+    content_chunk: String(row.content_chunk ?? ""),
+    chunk_index: Number(row.chunk_index),
+    similarity: Number(row.similarity),
+  }));
 }
 
 export async function getEmbeddingCount(novelId: number): Promise<number> {
