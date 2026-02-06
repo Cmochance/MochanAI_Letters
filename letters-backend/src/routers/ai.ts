@@ -22,6 +22,16 @@ function getJobErrorMessage(error: unknown) {
   return "Unknown expansion error";
 }
 
+function isMissingAsyncJobTableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes("ai_expand_jobs") &&
+    (error.message.includes("does not exist") ||
+      error.message.includes("relation") ||
+      error.message.includes("不存在"))
+  );
+}
+
 async function processNovelExpandJob(jobId: number, userId: number) {
   const settings = await db.getUserSettings(userId);
   const job = await db.getExpandJobById(userId, jobId);
@@ -202,15 +212,27 @@ export const aiRouter = router({
         input
       );
 
-      const job = await db.createExpandJob({
-        userId: ctx.user.id,
-        workspaceType: "novel",
-        workspaceId: input.novelId,
-        outline: outlineText,
-        targetWords: input.targetWords || 4000,
-        planDocumentId,
-        status: "pending",
-      });
+      let job;
+      try {
+        job = await db.createExpandJob({
+          userId: ctx.user.id,
+          workspaceType: "novel",
+          workspaceId: input.novelId,
+          outline: outlineText,
+          targetWords: input.targetWords || 4000,
+          planDocumentId,
+          status: "pending",
+        });
+      } catch (error) {
+        if (isMissingAsyncJobTableError(error)) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message:
+              "异步扩写任务表不存在，请先执行数据库迁移（0002_workspace_plans_papers.sql）",
+          });
+        }
+        throw error;
+      }
 
       setTimeout(() => {
         processNovelExpandJob(job.id, ctx.user.id).catch((error) => {

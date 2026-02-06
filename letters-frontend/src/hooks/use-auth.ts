@@ -4,6 +4,20 @@ import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 
+function clearLocalSupabaseSession() {
+  if (typeof window === "undefined") return;
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) return;
+    const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
+    const storageKey = `sb-${projectRef}-auth-token`;
+    window.localStorage.removeItem(storageKey);
+    window.sessionStorage.removeItem(storageKey);
+  } catch (error) {
+    console.warn("Failed to clear local Supabase session", error);
+  }
+}
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -13,11 +27,20 @@ export function useAuth() {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Failed to load Supabase session", error);
+        clearLocalSupabaseSession();
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+      });
 
     // Listen for auth changes
     const {
@@ -38,6 +61,9 @@ export function useAuth() {
         password,
       });
       if (error) throw error;
+      if (!data.session) {
+        throw new Error("登录失败：未获取到有效会话，请检查 Supabase 域名白名单配置");
+      }
       return data;
     },
     [supabase.auth]

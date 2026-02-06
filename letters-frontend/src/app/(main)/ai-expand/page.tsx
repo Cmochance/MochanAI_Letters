@@ -19,6 +19,7 @@ export default function AIExpandPage() {
   const [expandedContent, setExpandedContent] = useState("");
   const [copied, setCopied] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
+  const [fallbackMode, setFallbackMode] = useState(false);
 
   const hasPlanDocumentId = Number.isFinite(planDocumentId) && planDocumentId > 0;
   const hasVersion = Number.isFinite(version) && version > 0;
@@ -45,6 +46,12 @@ export default function AIExpandPage() {
       setJobId(data.jobId);
     },
   });
+  const expandContentSync = trpc.ai.expandContent.useMutation({
+    onSuccess: (data) => {
+      setExpandedContent(data.content);
+      setJobId(null);
+    },
+  });
 
   const expandJobQuery = trpc.ai.getExpandJob.useQuery(
     { jobId: jobId || -1 },
@@ -67,15 +74,38 @@ export default function AIExpandPage() {
     }
   }, [expandJobQuery.data]);
 
-  const handleExpand = () => {
+  const handleExpand = async () => {
     if (!novelId || !outline.trim()) return;
-    expandContentAsync.mutate({
-      novelId,
-      outline,
-      targetWords,
-      planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
-      version: hasVersion ? version : undefined,
-    });
+    if (fallbackMode) {
+      await expandContentSync.mutateAsync({
+        novelId,
+        outline,
+        targetWords,
+        planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
+        version: hasVersion ? version : undefined,
+      });
+      return;
+    }
+
+    try {
+      await expandContentAsync.mutateAsync({
+        novelId,
+        outline,
+        targetWords,
+        planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
+        version: hasVersion ? version : undefined,
+      });
+    } catch (error) {
+      console.error("Async expand failed, fallback to sync expand", error);
+      setFallbackMode(true);
+      await expandContentSync.mutateAsync({
+        novelId,
+        outline,
+        targetWords,
+        planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
+        version: hasVersion ? version : undefined,
+      });
+    }
   };
 
   const handleCopy = async () => {
@@ -148,12 +178,22 @@ export default function AIExpandPage() {
               />
             </div>
             <button
-              onClick={handleExpand}
-              disabled={expandContentAsync.isPending || !outline.trim()}
+              onClick={() => {
+                handleExpand().catch(console.error);
+              }}
+              disabled={
+                expandContentAsync.isPending ||
+                expandContentSync.isPending ||
+                !outline.trim()
+              }
               className="btn-primary flex items-center gap-2"
             >
               <Sparkles className="w-4 h-4" />
-              {expandContentAsync.isPending ? "提交中..." : "开始异步扩写"}
+              {expandContentAsync.isPending || expandContentSync.isPending
+                ? "提交中..."
+                : fallbackMode
+                  ? "开始同步扩写"
+                  : "开始异步扩写"}
             </button>
           </div>
         </div>
@@ -166,6 +206,14 @@ export default function AIExpandPage() {
       {expandContentAsync.isError && (
         <div className="card bg-error/10 border-error/20 mb-6">
           <p className="text-error">提交失败：{expandContentAsync.error.message}</p>
+        </div>
+      )}
+
+      {fallbackMode && (
+        <div className="card mb-6 bg-warning/10 border-warning/20">
+          <p className="text-foreground text-sm">
+            异步任务接口异常，已自动回退为同步扩写模式。建议检查后端是否已执行最新数据库迁移。
+          </p>
         </div>
       )}
 
@@ -223,9 +271,14 @@ export default function AIExpandPage() {
           </div>
 
           <div className="mt-6 flex gap-3">
-            <button onClick={handleExpand} className="btn-secondary flex items-center gap-2">
+            <button
+              onClick={() => {
+                handleExpand().catch(console.error);
+              }}
+              className="btn-secondary flex items-center gap-2"
+            >
               <RefreshCw className="w-4 h-4" />
-              重新提交任务
+              {fallbackMode ? "重新同步生成" : "重新提交任务"}
             </button>
           </div>
         </div>
