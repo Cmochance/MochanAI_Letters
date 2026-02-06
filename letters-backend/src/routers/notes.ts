@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
 import * as db from "../db/queries.js";
 
@@ -23,14 +24,21 @@ export const notesRouter = router({
 
   byNovel: protectedProcedure
     .input(z.object({ novelId: z.number() }))
-    .query(({ input }) => {
-      return db.getNovelNotes(input.novelId);
+    .query(async ({ ctx, input }) => {
+      const novel = await db.getNovelById(input.novelId);
+      if (!novel || novel.userId !== ctx.user.id) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Novel not found",
+        });
+      }
+      return db.getUserNovelNotes(ctx.user.id, input.novelId);
     }),
 
   getById: protectedProcedure
     .input(z.object({ noteId: z.number() }))
-    .query(({ input }) => {
-      return db.getNoteById(input.noteId);
+    .query(({ ctx, input }) => {
+      return db.getUserNoteById(ctx.user.id, input.noteId);
     }),
 
   create: protectedProcedure
@@ -39,10 +47,18 @@ export const notesRouter = router({
         title: z.string(),
         content: z.string(),
         category: categorySchema,
-        novelId: z.number().optional(),
+        novelId: z.number(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const novel = await db.getNovelById(input.novelId);
+      if (!novel || novel.userId !== ctx.user.id) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Novel not found",
+        });
+      }
+
       const noteId = await db.createNote({
         userId: ctx.user.id,
         title: input.title,
@@ -60,22 +76,46 @@ export const notesRouter = router({
         title: z.string(),
         content: z.string(),
         category: categorySchema,
-        novelId: z.number().optional().nullable(),
+        novelId: z.number(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const existingNote = await db.getUserNoteById(ctx.user.id, input.noteId);
+      if (!existingNote) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Note not found",
+        });
+      }
+
+      const novel = await db.getNovelById(input.novelId);
+      if (!novel || novel.userId !== ctx.user.id) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Novel not found",
+        });
+      }
+
       await db.updateNote(input.noteId, {
         title: input.title,
         content: input.content,
         category: input.category,
-        novelId: input.novelId ?? undefined,
+        novelId: input.novelId,
       });
       return { success: true };
     }),
 
   delete: protectedProcedure
     .input(z.object({ noteId: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const existingNote = await db.getUserNoteById(ctx.user.id, input.noteId);
+      if (!existingNote) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Note not found",
+        });
+      }
+
       await db.deleteNote(input.noteId);
       return { success: true };
     }),

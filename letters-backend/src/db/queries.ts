@@ -296,12 +296,29 @@ export async function getNotesByCategory(
     .orderBy(desc(notes.updatedAt));
 }
 
+export async function getUserNovelNotes(userId: number, novelId: number) {
+  return db
+    .select()
+    .from(notes)
+    .where(and(eq(notes.userId, userId), eq(notes.novelId, novelId)))
+    .orderBy(desc(notes.updatedAt));
+}
+
 export async function getNovelNotes(novelId: number) {
   return db
     .select()
     .from(notes)
     .where(eq(notes.novelId, novelId))
     .orderBy(desc(notes.updatedAt));
+}
+
+export async function getUserNoteById(userId: number, noteId: number) {
+  const result = await db
+    .select()
+    .from(notes)
+    .where(and(eq(notes.userId, userId), eq(notes.id, noteId)))
+    .limit(1);
+  return result[0] || null;
 }
 
 export async function getNoteById(noteId: number) {

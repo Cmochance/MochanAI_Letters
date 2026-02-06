@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { formatRelativeTime, truncateText } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -27,6 +29,13 @@ const CATEGORIES = [
 type Category = (typeof CATEGORIES)[number]["value"];
 
 export default function NotesPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialNovelId = Number(searchParams.get("novelId"));
+
+  const [selectedNovelId, setSelectedNovelId] = useState<number | null>(
+    Number.isFinite(initialNovelId) && initialNovelId > 0 ? initialNovelId : null
+  );
   const [selectedCategory, setSelectedCategory] = useState<Category | "all">(
     "all"
   );
@@ -39,11 +48,58 @@ export default function NotesPage() {
   });
 
   const utils = trpc.useUtils();
-  const { data: notes, isLoading } = trpc.notes.list.useQuery();
+  const { data: novels, isLoading: isNovelsLoading } = trpc.novels.list.useQuery();
+
+  useEffect(() => {
+    if (!novels) return;
+
+    if (novels.length === 0) {
+      if (selectedNovelId !== null) setSelectedNovelId(null);
+      return;
+    }
+
+    const queryNovelId = Number(searchParams.get("novelId"));
+    if (
+      Number.isFinite(queryNovelId) &&
+      novels.some((novel) => novel.id === queryNovelId)
+    ) {
+      if (selectedNovelId !== queryNovelId) {
+        setSelectedNovelId(queryNovelId);
+      }
+      return;
+    }
+
+    if (selectedNovelId && novels.some((novel) => novel.id === selectedNovelId)) {
+      return;
+    }
+
+    setSelectedNovelId(novels[0].id);
+  }, [novels, searchParams, selectedNovelId]);
+
+  useEffect(() => {
+    if (!selectedNovelId) return;
+
+    const currentNovelId = searchParams.get("novelId");
+    if (currentNovelId === String(selectedNovelId)) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("novelId", String(selectedNovelId));
+    router.replace(`/notes?${params.toString()}`);
+  }, [selectedNovelId, searchParams, router]);
+
+  const { data: notes, isLoading: isNotesLoading } = trpc.notes.byNovel.useQuery(
+    { novelId: selectedNovelId ?? -1 },
+    { enabled: selectedNovelId !== null }
+  );
+  const selectedNovel = novels?.find((novel) => novel.id === selectedNovelId);
+  const isLoading =
+    isNovelsLoading || (selectedNovelId !== null && isNotesLoading);
 
   const createNote = trpc.notes.create.useMutation({
     onSuccess: () => {
-      utils.notes.list.invalidate();
+      if (selectedNovelId) {
+        utils.notes.byNovel.invalidate({ novelId: selectedNovelId });
+      }
       setIsCreating(false);
       resetForm();
     },
@@ -51,7 +107,9 @@ export default function NotesPage() {
 
   const updateNote = trpc.notes.update.useMutation({
     onSuccess: () => {
-      utils.notes.list.invalidate();
+      if (selectedNovelId) {
+        utils.notes.byNovel.invalidate({ novelId: selectedNovelId });
+      }
       setIsEditing(null);
       resetForm();
     },
@@ -59,7 +117,9 @@ export default function NotesPage() {
 
   const deleteNote = trpc.notes.delete.useMutation({
     onSuccess: () => {
-      utils.notes.list.invalidate();
+      if (selectedNovelId) {
+        utils.notes.byNovel.invalidate({ novelId: selectedNovelId });
+      }
     },
   });
 
@@ -67,9 +127,19 @@ export default function NotesPage() {
     setFormData({ title: "", content: "", category: "inspiration" });
   };
 
+  useEffect(() => {
+    setIsCreating(false);
+    setIsEditing(null);
+    setSelectedCategory("all");
+    setFormData({ title: "", content: "", category: "inspiration" });
+  }, [selectedNovelId]);
+
   const handleCreate = () => {
-    if (!formData.title.trim() || !formData.content.trim()) return;
+    if (!selectedNovelId || !formData.title.trim() || !formData.content.trim()) {
+      return;
+    }
     createNote.mutate({
+      novelId: selectedNovelId,
       title: formData.title.trim(),
       content: formData.content.trim(),
       category: formData.category,
@@ -77,10 +147,16 @@ export default function NotesPage() {
   };
 
   const handleUpdate = () => {
-    if (!formData.title.trim() || !formData.content.trim() || !isEditing)
+    if (
+      !selectedNovelId ||
+      !formData.title.trim() ||
+      !formData.content.trim() ||
+      !isEditing
+    )
       return;
     updateNote.mutate({
       noteId: isEditing,
+      novelId: selectedNovelId,
       title: formData.title.trim(),
       content: formData.content.trim(),
       category: formData.category,
@@ -112,21 +188,58 @@ export default function NotesPage() {
     return cat?.icon || FileText;
   };
 
+  if (!isNovelsLoading && novels && novels.length === 0) {
+    return (
+      <div className="content-container">
+        <div className="text-center py-20">
+          <BookOpen className="w-16 h-16 text-muted/30 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-foreground mb-2">还没有小说</h3>
+          <p className="text-muted mb-6">请先创建小说，再为该小说记录灵感笔记</p>
+          <Link href="/" className="btn-primary inline-flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            去创建小说
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="content-container">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="page-title mb-1">灵感笔记</h1>
-          <p className="text-muted">{notes?.length || 0} 条笔记</p>
+          <p className="text-muted">
+            {selectedNovel ? `${selectedNovel.title} · ` : ""}
+            {notes?.length || 0} 条笔记
+          </p>
         </div>
         <button
           onClick={() => setIsCreating(true)}
+          disabled={!selectedNovelId}
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
           新建笔记
         </button>
+      </div>
+
+      {/* Novel Selector */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium mb-2">当前小说</label>
+        <select
+          value={selectedNovelId ?? ""}
+          onChange={(e) => setSelectedNovelId(Number(e.target.value))}
+          className="input max-w-md"
+        >
+          {(novels || []).map((novel) => (
+            <option key={novel.id} value={novel.id}>
+              {novel.title}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted mt-2">笔记仅作用于当前选中的小说</p>
       </div>
 
       {/* Category Filter */}
@@ -169,6 +282,9 @@ export default function NotesPage() {
             <h2 className="text-xl font-serif font-semibold mb-4">
               {isEditing ? "编辑笔记" : "新建笔记"}
             </h2>
+            <p className="text-sm text-muted mb-4">
+              当前小说：{selectedNovel?.title || "-"}
+            </p>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2">标题</label>
@@ -269,6 +385,7 @@ export default function NotesPage() {
           <button
             onClick={() => setIsCreating(true)}
             className="btn-primary inline-flex items-center gap-2"
+            disabled={!selectedNovelId}
           >
             <Plus className="w-4 h-4" />
             新建笔记

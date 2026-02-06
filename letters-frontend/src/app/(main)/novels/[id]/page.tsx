@@ -102,6 +102,13 @@ export default function NovelDetailPage() {
           AI 规划
         </Link>
         <Link
+          href={`/notes?novelId=${novelId}`}
+          className="btn-secondary flex items-center gap-2"
+        >
+          <FileText className="w-4 h-4" />
+          灵感笔记
+        </Link>
+        <Link
           href={`/export?novelId=${novelId}`}
           className="btn-secondary flex items-center gap-2"
         >
