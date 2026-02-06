@@ -21,7 +21,22 @@ export const novelsRouter = router({
         title: input.title,
         description: input.description,
       });
-      return { id: novelId };
+
+      let coverUrl: string | undefined;
+      try {
+        const result = await generateNovelCover({
+          title: input.title,
+          description: input.description,
+          novelId,
+          userId: ctx.user.id,
+        });
+        coverUrl = result.imageUrl;
+        await db.updateNovel(novelId, { coverUrl });
+      } catch (error) {
+        console.error("Auto cover generation failed:", error);
+      }
+
+      return { id: novelId, coverUrl };
     }),
 
   delete: protectedProcedure
@@ -39,10 +54,12 @@ export const novelsRouter = router({
         description: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { imageUrl } = await generateNovelCover({
         title: input.title,
         description: input.description,
+        novelId: input.novelId,
+        userId: ctx.user.id,
       });
 
       // Update novel with cover URL

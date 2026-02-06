@@ -73,11 +73,17 @@ JWT_SECRET=your-jwt-secret
 
 # AI (Chat Completion)
 BUILT_IN_FORGE_API_KEY=your-openai-api-key
-BUILT_IN_FORGE_BASE_URL=https://api.openai.com
+BUILT_IN_FORGE_BASE_URL=https://api.openai.com/v1
+
+# AI Image Generation (for novel covers)
+# Falls back to BUILT_IN_FORGE_* if IMAGE_GEN_API_KEY is not set
+IMAGE_GEN_API_KEY=your-image-api-key
+IMAGE_GEN_BASE_URL=https://api.openai.com/v1
+IMAGE_GEN_MODEL=dall-e-3
 
 # Embedding Model (for RAG)
 EMBEDDING_API_KEY=your-openai-api-key
-EMBEDDING_BASE_URL=https://api.openai.com
+EMBEDDING_BASE_URL=https://api.openai.com/v1
 EMBEDDING_MODEL=text-embedding-3-small
 
 # Cloudflare R2 Storage
@@ -148,6 +154,7 @@ docker-compose up -d
 ## 功能特性
 
 - 📚 **小说管理** - 创建、编辑、删除小说
+- 🖼️ **智能封面** - 新建小说自动生成封面，可手动重新生成
 - 📝 **章节编辑** - 富文本编辑器，自动保存
 - 🤖 **AI 辅助** - 章节规划、内容扩写
 - 🔍 **RAG 检索** - 基于小说全文的智能上下文检索

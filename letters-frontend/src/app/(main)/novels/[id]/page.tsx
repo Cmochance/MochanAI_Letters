@@ -24,6 +24,8 @@ export default function NovelDetailPage() {
   const [newChapterTitle, setNewChapterTitle] = useState("");
 
   const utils = trpc.useUtils();
+  const { data: novels } = trpc.novels.list.useQuery();
+  const currentNovel = novels?.find((novel) => novel.id === novelId);
   const { data: chapters, isLoading } = trpc.chapters.list.useQuery({
     novelId,
   });
@@ -110,8 +112,8 @@ export default function NovelDetailPage() {
           onClick={() =>
             generateCover.mutate({
               novelId,
-              title: "小说",
-              description: "",
+              title: currentNovel?.title || "小说",
+              description: currentNovel?.description || "",
             })
           }
           disabled={generateCover.isPending}

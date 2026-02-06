@@ -173,6 +173,7 @@ nano .env  # 编辑配置
 - `SUPABASE_URL` / `SUPABASE_SERVICE_KEY`: Supabase 认证
 - `CORS_ORIGIN`: 前端域名
 - `BUILT_IN_FORGE_*`: AI API 配置
+- `IMAGE_GEN_*`: 封面生图 API 配置（可独立于 `BUILT_IN_FORGE_*`）
 
 ### 2.4 部署
 
@@ -244,3 +245,9 @@ sudo certbot --nginx -d api.yourdomain.com
 
 - 确认 `CORS_ORIGIN` 包含前端域名
 - 多个域名用逗号分隔
+
+### 封面生成失败
+
+- 优先配置 `IMAGE_GEN_API_KEY`、`IMAGE_GEN_BASE_URL`、`IMAGE_GEN_MODEL`
+- 若未配置 `IMAGE_GEN_API_KEY`，系统会回退到 `BUILT_IN_FORGE_API_KEY`
+- `IMAGE_GEN_BASE_URL` 支持填写 `https://...` 或 `https://.../v1`，后端会自动规范化
