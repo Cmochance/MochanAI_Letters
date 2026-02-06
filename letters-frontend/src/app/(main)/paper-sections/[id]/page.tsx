@@ -1,28 +1,28 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { countWords } from "@/lib/utils";
 import { ArrowLeft, Save, Sparkles } from "lucide-react";
 import { useDebouncedCallback } from "@/hooks/use-debounce";
 
-export default function ChapterDetailPage() {
+export default function PaperSectionDetailPage() {
   const params = useParams();
-  const router = useRouter();
-  const chapterId = Number(params.id);
+  const sectionId = Number(params.id);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
-  const { data: chapter, isLoading } = trpc.chapters.get.useQuery({
-    id: chapterId,
-  });
+  const { data: section, isLoading } = trpc.paperSections.get.useQuery(
+    { id: sectionId },
+    { enabled: Number.isFinite(sectionId) && sectionId > 0 }
+  );
 
-  const updateChapter = trpc.chapters.update.useMutation({
+  const updateSection = trpc.paperSections.update.useMutation({
     onSuccess: () => {
       setLastSaved(new Date());
       setIsSaving(false);
@@ -32,29 +32,27 @@ export default function ChapterDetailPage() {
     },
   });
 
-  // Initialize form with chapter data
   useEffect(() => {
-    if (chapter) {
-      setTitle(chapter.title);
-      setContent(chapter.content);
+    if (section) {
+      setTitle(section.title);
+      setContent(section.content);
     }
-  }, [chapter]);
+  }, [section]);
 
-  // Auto-save with debounce
   const debouncedSave = useDebouncedCallback(
     useCallback(
       (newTitle: string, newContent: string) => {
-        if (!chapter) return;
+        if (!section) return;
         setIsSaving(true);
-        updateChapter.mutate({
-          id: chapterId,
+        updateSection.mutate({
+          id: sectionId,
           title: newTitle,
           content: newContent,
         });
       },
-      [chapter, chapterId, updateChapter]
+      [section, sectionId, updateSection]
     ),
-    2000
+    1800
   );
 
   const handleTitleChange = (newTitle: string) => {
@@ -68,10 +66,10 @@ export default function ChapterDetailPage() {
   };
 
   const handleManualSave = () => {
-    if (!chapter) return;
+    if (!section) return;
     setIsSaving(true);
-    updateChapter.mutate({
-      id: chapterId,
+    updateSection.mutate({
+      id: sectionId,
       title,
       content,
     });
@@ -89,13 +87,13 @@ export default function ChapterDetailPage() {
     );
   }
 
-  if (!chapter) {
+  if (!section) {
     return (
       <div className="content-container">
         <div className="text-center py-20">
-          <p className="text-muted">章节不存在</p>
-          <Link href="/novels" className="btn-primary mt-4 inline-block">
-            返回首页
+          <p className="text-muted">小节不存在</p>
+          <Link href="/papers" className="btn-primary mt-4 inline-block">
+            返回论文列表
           </Link>
         </div>
       </div>
@@ -104,27 +102,22 @@ export default function ChapterDetailPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <div className="sticky top-16 z-40 bg-surface/80 backdrop-blur-md border-b border-border">
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
-                href={`/novels/${chapter.novelId}`}
+                href={`/papers/${section.paperId}`}
                 className="p-2 rounded-lg hover:bg-muted/10 transition-colors"
               >
                 <ArrowLeft className="w-5 h-5 text-muted" />
               </Link>
               <div>
-                <span className="tag text-xs">
-                  第 {chapter.chapterNumber} 章
-                </span>
+                <span className="tag text-xs">第 {section.sectionNumber} 节</span>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-muted">
-                {wordCount.toLocaleString()} 字
-              </span>
+              <span className="text-sm text-muted">{wordCount.toLocaleString()} 字</span>
               {lastSaved && (
                 <span className="text-xs text-muted">
                   已保存于 {lastSaved.toLocaleTimeString()}
@@ -139,7 +132,7 @@ export default function ChapterDetailPage() {
                 {isSaving ? "保存中..." : "保存"}
               </button>
               <Link
-                href={`/ai-expand?novelId=${chapter.novelId}&chapterId=${chapterId}`}
+                href={`/paper-ai-expand?paperId=${section.paperId}&sectionId=${sectionId}`}
                 className="btn-primary flex items-center gap-2 text-sm py-2"
               >
                 <Sparkles className="w-4 h-4" />
@@ -150,23 +143,20 @@ export default function ChapterDetailPage() {
         </div>
       </div>
 
-      {/* Editor */}
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Title Input */}
         <input
           type="text"
           value={title}
           onChange={(e) => handleTitleChange(e.target.value)}
           className="w-full text-2xl font-serif font-bold text-foreground bg-transparent border-none outline-none mb-6 placeholder:text-muted/50"
-          placeholder="章节标题"
+          placeholder="小节标题"
         />
 
-        {/* Content Editor */}
         <textarea
           value={content}
           onChange={(e) => handleContentChange(e.target.value)}
           className="w-full min-h-[60vh] text-lg leading-relaxed text-foreground bg-transparent border-none outline-none resize-none placeholder:text-muted/50 font-serif"
-          placeholder="开始写作..."
+          placeholder="开始写作学术内容..."
         />
       </div>
     </div>

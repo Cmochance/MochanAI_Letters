@@ -10,15 +10,70 @@ import {
  * Provides context-aware content retrieval for AI-assisted writing
  */
 
-// Configuration
-const DEFAULT_CHUNK_SIZE = 800; // Characters per chunk
-const DEFAULT_CHUNK_OVERLAP = 100; // Overlap between chunks
-const MIN_CONTENT_LENGTH = 100; // Minimum content length to vectorize
+const DEFAULT_CHUNK_SIZE = 800;
+const DEFAULT_CHUNK_OVERLAP = 100;
+const MIN_CONTENT_LENGTH = 100;
+const MAX_CONTEXT_CHARS = 2200;
 
-/**
- * Split text into overlapping chunks for embedding
- * Uses character-based splitting with overlap for context continuity
- */
+const NOVEL_NOTE_CATEGORY_LABELS: Record<db.NoteCategoryValue, string> = {
+  inspiration: "灵感",
+  character: "人物",
+  worldview: "世界观",
+  plot: "情节",
+  other: "其他",
+};
+
+const PAPER_NOTE_CATEGORY_LABELS: Record<db.PaperNoteCategoryValue, string> = {
+  research_question: "研究问题",
+  literature_review: "文献综述",
+  methodology: "方法设计",
+  data_experiment: "数据与实验",
+  result_analysis: "结果分析",
+  discussion_limitations: "讨论与局限",
+  citations_todo: "引文待补",
+};
+
+const NOVEL_OUTLINE_NOTE_PRIORITY: db.NoteCategoryValue[] = [
+  "plot",
+  "character",
+  "worldview",
+  "inspiration",
+  "other",
+];
+
+const NOVEL_EXPAND_NOTE_PRIORITY: db.NoteCategoryValue[] = [
+  "plot",
+  "character",
+  "inspiration",
+  "worldview",
+  "other",
+];
+
+const PAPER_OUTLINE_NOTE_PRIORITY: db.PaperNoteCategoryValue[] = [
+  "research_question",
+  "literature_review",
+  "methodology",
+  "data_experiment",
+  "result_analysis",
+  "discussion_limitations",
+  "citations_todo",
+];
+
+const PAPER_EXPAND_NOTE_PRIORITY: db.PaperNoteCategoryValue[] = [
+  "methodology",
+  "data_experiment",
+  "result_analysis",
+  "literature_review",
+  "discussion_limitations",
+  "research_question",
+  "citations_todo",
+];
+
+function truncateContext(text: string, maxChars: number = MAX_CONTEXT_CHARS) {
+  if (!text) return "";
+  return text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
+}
+
 export function splitTextIntoChunks(
   text: string,
   chunkSize: number = DEFAULT_CHUNK_SIZE,
@@ -32,10 +87,8 @@ export function splitTextIntoChunks(
   let start = 0;
 
   while (start < text.length) {
-    // Find a good break point (end of sentence or paragraph)
     let end = Math.min(start + chunkSize, text.length);
 
-    // If not at the end, try to break at sentence boundary
     if (end < text.length) {
       const breakPoints = [". ", "。", "！", "？", "\n\n", "\n"];
       let bestBreak = -1;
@@ -58,7 +111,6 @@ export function splitTextIntoChunks(
       chunks.push(chunk);
     }
 
-    // Move start position with overlap
     start = end - overlap;
     if (start >= text.length) break;
   }
@@ -66,22 +118,20 @@ export function splitTextIntoChunks(
   return chunks;
 }
 
-/**
- * Vectorize a chapter's content and store embeddings
- * @param chapterId - The chapter to vectorize
- * @param userApiKey - Optional user-provided API key
- * @param userBaseUrl - Optional user-provided base URL
- * @param userModel - Optional user-provided model name
- */
+function hasEmbeddingRuntime(userApiKey?: string): boolean {
+  return isEmbeddingConfigured() || Boolean(userApiKey);
+}
+
+// ============ Novel Embeddings ============
+
 export async function vectorizeChapter(
   chapterId: number,
   userApiKey?: string,
   userBaseUrl?: string,
   userModel?: string
 ): Promise<{ chunksCreated: number }> {
-  // Check if embedding is configured
-  if (!isEmbeddingConfigured() && !userApiKey) {
-    console.warn("Embedding API not configured, skipping vectorization");
+  if (!hasEmbeddingRuntime(userApiKey)) {
+    console.warn("Embedding API not configured, skipping chapter vectorization");
     return { chunksCreated: 0 };
   }
 
@@ -90,21 +140,17 @@ export async function vectorizeChapter(
     throw new Error(`Chapter ${chapterId} not found`);
   }
 
-  // Skip if content is too short
   if (chapter.content.length < MIN_CONTENT_LENGTH) {
     return { chunksCreated: 0 };
   }
 
-  // Delete existing embeddings for this chapter
   await db.deleteChapterEmbeddings(chapterId);
 
-  // Split content into chunks
   const chunks = splitTextIntoChunks(chapter.content);
   if (chunks.length === 0) {
     return { chunksCreated: 0 };
   }
 
-  // Generate embeddings in batch
   const embeddings = await batchGenerateEmbeddings(
     chunks,
     userApiKey,
@@ -112,7 +158,6 @@ export async function vectorizeChapter(
     userModel
   );
 
-  // Store embeddings
   const embeddingData = chunks.map((chunk, index) => ({
     chapterId: chapter.id,
     novelId: chapter.novelId,
@@ -126,13 +171,6 @@ export async function vectorizeChapter(
   return { chunksCreated: chunks.length };
 }
 
-/**
- * Vectorize all chapters of a novel
- * @param novelId - The novel to vectorize
- * @param userApiKey - Optional user-provided API key
- * @param userBaseUrl - Optional user-provided base URL
- * @param userModel - Optional user-provided model name
- */
 export async function vectorizeNovel(
   novelId: number,
   userApiKey?: string,
@@ -153,7 +191,7 @@ export async function vectorizeNovel(
       );
       totalChunks += result.chunksCreated;
       if (result.chunksCreated > 0) {
-        chaptersProcessed++;
+        chaptersProcessed += 1;
       }
     } catch (error) {
       console.error(`Failed to vectorize chapter ${chapter.id}:`, error);
@@ -163,15 +201,159 @@ export async function vectorizeNovel(
   return { totalChunks, chaptersProcessed };
 }
 
-/**
- * Search for relevant content using vector similarity
- * @param novelId - The novel to search within
- * @param query - The search query
- * @param limit - Maximum number of results
- * @param userApiKey - Optional user-provided API key
- * @param userBaseUrl - Optional user-provided base URL
- * @param userModel - Optional user-provided model name
- */
+export async function vectorizeNote(
+  noteId: number,
+  userApiKey?: string,
+  userBaseUrl?: string,
+  userModel?: string
+): Promise<{ chunksCreated: number }> {
+  if (!hasEmbeddingRuntime(userApiKey)) {
+    console.warn("Embedding API not configured, skipping note vectorization");
+    return { chunksCreated: 0 };
+  }
+
+  const note = await db.getNoteById(noteId);
+  if (!note || !note.novelId) {
+    return { chunksCreated: 0 };
+  }
+
+  const embeddingSource = `${note.title}\n${note.content}`;
+  if (embeddingSource.length < MIN_CONTENT_LENGTH) {
+    await db.deleteNoteEmbeddings(note.id);
+    return { chunksCreated: 0 };
+  }
+
+  await db.deleteNoteEmbeddings(note.id);
+
+  const chunks = splitTextIntoChunks(embeddingSource);
+  if (chunks.length === 0) {
+    return { chunksCreated: 0 };
+  }
+
+  const embeddings = await batchGenerateEmbeddings(
+    chunks,
+    userApiKey,
+    userBaseUrl,
+    userModel
+  );
+
+  const payload = chunks.map((chunk, index) => ({
+    userId: note.userId,
+    noteId: note.id,
+    novelId: note.novelId!,
+    category: note.category,
+    contentChunk: chunk,
+    embedding: embeddings[index],
+    chunkIndex: index,
+  }));
+
+  await db.createNoteEmbeddingsBatch(payload);
+
+  return { chunksCreated: chunks.length };
+}
+
+// ============ Paper Embeddings ============
+
+export async function vectorizePaperSection(
+  sectionId: number,
+  userApiKey?: string,
+  userBaseUrl?: string,
+  userModel?: string
+): Promise<{ chunksCreated: number }> {
+  if (!hasEmbeddingRuntime(userApiKey)) {
+    console.warn("Embedding API not configured, skipping paper section vectorization");
+    return { chunksCreated: 0 };
+  }
+
+  const section = await db.getPaperSectionById(sectionId);
+  if (!section) {
+    throw new Error(`Paper section ${sectionId} not found`);
+  }
+
+  const embeddingSource = `${section.title}\n${section.content}`;
+  if (embeddingSource.length < MIN_CONTENT_LENGTH) {
+    await db.deletePaperSectionEmbeddings(section.id);
+    return { chunksCreated: 0 };
+  }
+
+  await db.deletePaperSectionEmbeddings(section.id);
+
+  const chunks = splitTextIntoChunks(embeddingSource);
+  if (chunks.length === 0) {
+    return { chunksCreated: 0 };
+  }
+
+  const embeddings = await batchGenerateEmbeddings(
+    chunks,
+    userApiKey,
+    userBaseUrl,
+    userModel
+  );
+
+  const payload = chunks.map((chunk, index) => ({
+    sectionId: section.id,
+    paperId: section.paperId,
+    contentChunk: chunk,
+    embedding: embeddings[index],
+    chunkIndex: index,
+  }));
+
+  await db.createPaperSectionEmbeddingsBatch(payload);
+  return { chunksCreated: chunks.length };
+}
+
+export async function vectorizePaperNote(
+  noteId: number,
+  userApiKey?: string,
+  userBaseUrl?: string,
+  userModel?: string
+): Promise<{ chunksCreated: number }> {
+  if (!hasEmbeddingRuntime(userApiKey)) {
+    console.warn("Embedding API not configured, skipping paper note vectorization");
+    return { chunksCreated: 0 };
+  }
+
+  const note = await db.getPaperNoteByIdUnsafe(noteId);
+  if (!note) {
+    return { chunksCreated: 0 };
+  }
+
+  const source = `${note.title}\n${note.content}`;
+  if (source.length < MIN_CONTENT_LENGTH) {
+    await db.deletePaperNoteEmbeddings(note.id);
+    return { chunksCreated: 0 };
+  }
+
+  await db.deletePaperNoteEmbeddings(note.id);
+
+  const chunks = splitTextIntoChunks(source);
+  if (chunks.length === 0) {
+    return { chunksCreated: 0 };
+  }
+
+  const embeddings = await batchGenerateEmbeddings(
+    chunks,
+    userApiKey,
+    userBaseUrl,
+    userModel
+  );
+
+  const payload = chunks.map((chunk, index) => ({
+    userId: note.userId,
+    noteId: note.id,
+    paperId: note.paperId,
+    category: note.category,
+    contentChunk: chunk,
+    embedding: embeddings[index],
+    chunkIndex: index,
+  }));
+
+  await db.createPaperNoteEmbeddingsBatch(payload);
+  return { chunksCreated: chunks.length };
+}
+
+// ============ Novel Context Retrieval ============
+
 export async function searchRAGContext(
   novelId: number,
   query: string,
@@ -180,19 +362,15 @@ export async function searchRAGContext(
   userBaseUrl?: string,
   userModel?: string
 ): Promise<Array<{ content: string; similarity: number; chapterId: number }>> {
-  // Check if embedding is configured
-  if (!isEmbeddingConfigured() && !userApiKey) {
-    console.warn("Embedding API not configured, returning empty results");
+  if (!hasEmbeddingRuntime(userApiKey)) {
     return [];
   }
 
-  // Check if novel has embeddings
   const embeddingCount = await db.getEmbeddingCount(novelId);
   if (embeddingCount === 0) {
     return [];
   }
 
-  // Generate query embedding
   const queryEmbedding = await generateEmbedding(
     query,
     userApiKey,
@@ -200,7 +378,6 @@ export async function searchRAGContext(
     userModel
   );
 
-  // Search for similar chunks
   const results = await db.searchSimilarChunks(novelId, queryEmbedding, limit);
 
   return results.map((r) => ({
@@ -210,10 +387,69 @@ export async function searchRAGContext(
   }));
 }
 
-/**
- * Get AI context combining RAG results and recent chapters
- * This is the main function used by the AI service for context-aware generation
- */
+export async function searchNovelNoteContext(
+  novelId: number,
+  query: string,
+  limit: number = 6,
+  userApiKey?: string,
+  userBaseUrl?: string,
+  userModel?: string
+): Promise<
+  Array<{
+    content: string;
+    similarity: number;
+    category: db.NoteCategoryValue;
+    noteId: number;
+  }>
+> {
+  if (!hasEmbeddingRuntime(userApiKey)) {
+    return [];
+  }
+
+  const embeddingCount = await db.getNovelNoteEmbeddingCount(novelId);
+  if (embeddingCount === 0) {
+    return [];
+  }
+
+  const queryEmbedding = await generateEmbedding(
+    query,
+    userApiKey,
+    userBaseUrl,
+    userModel
+  );
+
+  const results = await db.searchSimilarNoteChunks(novelId, queryEmbedding, limit);
+
+  return results.map((row) => ({
+    content: row.content_chunk,
+    similarity: row.similarity,
+    category: row.category,
+    noteId: row.note_id,
+  }));
+}
+
+async function buildStructuredNovelNotesContext(
+  novelId: number,
+  categories: db.NoteCategoryValue[],
+  limitPerCategory: number = 3
+): Promise<string> {
+  const categoryLines: string[] = [];
+
+  for (const category of categories) {
+    const notes = await db.getNovelNotesByCategory(novelId, category, limitPerCategory);
+    if (notes.length === 0) {
+      continue;
+    }
+
+    categoryLines.push(`【${NOVEL_NOTE_CATEGORY_LABELS[category]}】`);
+    for (const note of notes) {
+      categoryLines.push(`- ${note.title}: ${truncateContext(note.content, 180)}`);
+    }
+  }
+
+  return categoryLines.join("\n");
+}
+
 export async function getAIContext(
   novelId: number,
   chapterNumber: number,
@@ -221,12 +457,17 @@ export async function getAIContext(
     query?: string;
     recentCount?: number;
     ragLimit?: number;
+    noteRagLimit?: number;
+    noteCategories?: db.NoteCategoryValue[];
+    phase?: "outline" | "expand";
     userApiKey?: string;
     userBaseUrl?: string;
     userModel?: string;
   }
 ): Promise<{
   ragContext: string;
+  noteRagContext: string;
+  structuredNotesContext: string;
   recentChapters: Array<{
     number: number;
     title: string;
@@ -239,12 +480,14 @@ export async function getAIContext(
     query,
     recentCount = 3,
     ragLimit = 5,
+    noteRagLimit = 6,
+    noteCategories,
+    phase = "outline",
     userApiKey,
     userBaseUrl,
     userModel,
   } = options || {};
 
-  // Get recent chapters (before the current chapter)
   const allRecentChapters = await db.getRecentChapters(novelId, recentCount + 1);
   const recentChapters = allRecentChapters
     .filter((ch) => ch.chapterNumber < chapterNumber)
@@ -253,19 +496,25 @@ export async function getAIContext(
       number: ch.chapterNumber,
       title: ch.title,
       content: ch.content,
-      // Generate a brief summary for context (first 500 chars)
-      summary: ch.content.length > 500 
-        ? ch.content.slice(0, 500) + "..." 
-        : ch.content,
+      summary: ch.content.length > 500 ? `${ch.content.slice(0, 500)}...` : ch.content,
     }));
 
-  // Check if novel has embeddings
-  const embeddingCount = await db.getEmbeddingCount(novelId);
-  const hasEmbeddings = embeddingCount > 0;
+  const selectedCategories =
+    noteCategories ||
+    (phase === "expand" ? NOVEL_EXPAND_NOTE_PRIORITY : NOVEL_OUTLINE_NOTE_PRIORITY);
 
-  // Get RAG context if query is provided and embeddings exist
+  const structuredNotesContext = await buildStructuredNovelNotesContext(
+    novelId,
+    selectedCategories,
+    3
+  );
+
+  const chapterEmbeddingCount = await db.getEmbeddingCount(novelId);
+  const noteEmbeddingCount = await db.getNovelNoteEmbeddingCount(novelId);
+  const hasEmbeddings = chapterEmbeddingCount + noteEmbeddingCount > 0;
+
   let ragContext = "";
-  if (query && hasEmbeddings) {
+  if (query && chapterEmbeddingCount > 0) {
     try {
       const ragResults = await searchRAGContext(
         novelId,
@@ -276,28 +525,268 @@ export async function getAIContext(
         userModel
       );
 
-      if (ragResults.length > 0) {
-        ragContext = ragResults
-          .filter((r) => r.similarity > 0.5) // Only include relevant results
-          .map((r) => r.content)
-          .join("\n\n---\n\n");
-      }
+      ragContext = ragResults
+        .filter((r) => r.similarity > 0.45)
+        .map((r) => truncateContext(r.content, 350))
+        .join("\n\n---\n\n");
     } catch (error) {
-      console.error("RAG search failed:", error);
+      console.error("Novel chapter RAG search failed:", error);
+    }
+  }
+
+  let noteRagContext = "";
+  if (query && noteEmbeddingCount > 0) {
+    try {
+      const noteResults = await searchNovelNoteContext(
+        novelId,
+        query,
+        noteRagLimit,
+        userApiKey,
+        userBaseUrl,
+        userModel
+      );
+
+      noteRagContext = noteResults
+        .filter((r) => r.similarity > 0.45)
+        .map(
+          (r) =>
+            `[${NOVEL_NOTE_CATEGORY_LABELS[r.category]}] ${truncateContext(
+              r.content,
+              240
+            )}`
+        )
+        .join("\n");
+    } catch (error) {
+      console.error("Novel note RAG search failed:", error);
     }
   }
 
   return {
     ragContext,
+    noteRagContext,
+    structuredNotesContext,
     recentChapters,
     hasEmbeddings,
   };
 }
 
-/**
- * Build a comprehensive context prompt for AI generation
- * Combines RAG context, recent chapters, and user notes
- */
+// ============ Paper Context Retrieval ============
+
+async function buildStructuredPaperNotesContext(
+  paperId: number,
+  categories: db.PaperNoteCategoryValue[],
+  limitPerCategory: number = 3
+): Promise<string> {
+  const lines: string[] = [];
+
+  for (const category of categories) {
+    const notes = await db.getPaperNotesByCategory(paperId, category, limitPerCategory);
+    if (notes.length === 0) {
+      continue;
+    }
+
+    lines.push(`【${PAPER_NOTE_CATEGORY_LABELS[category]}】`);
+    for (const note of notes) {
+      lines.push(`- ${note.title}: ${truncateContext(note.content, 180)}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+async function searchPaperSectionContext(
+  paperId: number,
+  query: string,
+  limit: number,
+  userApiKey?: string,
+  userBaseUrl?: string,
+  userModel?: string
+) {
+  if (!hasEmbeddingRuntime(userApiKey)) {
+    return [] as Array<{ content: string; similarity: number }>;
+  }
+
+  const embeddingCount = await db.getPaperSectionEmbeddingCount(paperId);
+  if (embeddingCount === 0) {
+    return [] as Array<{ content: string; similarity: number }>;
+  }
+
+  const queryEmbedding = await generateEmbedding(
+    query,
+    userApiKey,
+    userBaseUrl,
+    userModel
+  );
+
+  const results = await db.searchSimilarPaperSectionChunks(
+    paperId,
+    queryEmbedding,
+    limit
+  );
+
+  return results.map((r) => ({
+    content: r.content_chunk,
+    similarity: r.similarity,
+  }));
+}
+
+async function searchPaperNoteContext(
+  paperId: number,
+  query: string,
+  limit: number,
+  userApiKey?: string,
+  userBaseUrl?: string,
+  userModel?: string
+) {
+  if (!hasEmbeddingRuntime(userApiKey)) {
+    return [] as Array<{
+      content: string;
+      similarity: number;
+      category: db.PaperNoteCategoryValue;
+    }>;
+  }
+
+  const embeddingCount = await db.getPaperNoteEmbeddingCount(paperId);
+  if (embeddingCount === 0) {
+    return [] as Array<{
+      content: string;
+      similarity: number;
+      category: db.PaperNoteCategoryValue;
+    }>;
+  }
+
+  const queryEmbedding = await generateEmbedding(
+    query,
+    userApiKey,
+    userBaseUrl,
+    userModel
+  );
+
+  const results = await db.searchSimilarPaperNoteChunks(paperId, queryEmbedding, limit);
+  return results.map((r) => ({
+    content: r.content_chunk,
+    similarity: r.similarity,
+    category: r.category,
+  }));
+}
+
+export async function getPaperAIContext(
+  paperId: number,
+  sectionNumber: number,
+  options?: {
+    query?: string;
+    recentCount?: number;
+    ragLimit?: number;
+    noteRagLimit?: number;
+    noteCategories?: db.PaperNoteCategoryValue[];
+    phase?: "outline" | "expand";
+    userApiKey?: string;
+    userBaseUrl?: string;
+    userModel?: string;
+  }
+): Promise<{
+  ragContext: string;
+  noteRagContext: string;
+  structuredNotesContext: string;
+  recentSections: Array<{
+    number: number;
+    title: string;
+    content: string;
+    summary?: string;
+  }>;
+  hasEmbeddings: boolean;
+}> {
+  const {
+    query,
+    recentCount = 2,
+    ragLimit = 5,
+    noteRagLimit = 6,
+    noteCategories,
+    phase = "outline",
+    userApiKey,
+    userBaseUrl,
+    userModel,
+  } = options || {};
+
+  const allRecentSections = await db.getRecentPaperSections(paperId, recentCount + 1);
+  const recentSections = allRecentSections
+    .filter((section) => section.sectionNumber < sectionNumber)
+    .slice(0, recentCount)
+    .map((section) => ({
+      number: section.sectionNumber,
+      title: section.title,
+      content: section.content,
+      summary:
+        section.content.length > 500
+          ? `${section.content.slice(0, 500)}...`
+          : section.content,
+    }));
+
+  const selectedCategories =
+    noteCategories ||
+    (phase === "expand" ? PAPER_EXPAND_NOTE_PRIORITY : PAPER_OUTLINE_NOTE_PRIORITY);
+
+  const structuredNotesContext = await buildStructuredPaperNotesContext(
+    paperId,
+    selectedCategories,
+    3
+  );
+
+  const sectionEmbeddingCount = await db.getPaperSectionEmbeddingCount(paperId);
+  const noteEmbeddingCount = await db.getPaperNoteEmbeddingCount(paperId);
+  const hasEmbeddings = sectionEmbeddingCount + noteEmbeddingCount > 0;
+
+  let ragContext = "";
+  if (query && sectionEmbeddingCount > 0) {
+    const results = await searchPaperSectionContext(
+      paperId,
+      query,
+      ragLimit,
+      userApiKey,
+      userBaseUrl,
+      userModel
+    );
+
+    ragContext = results
+      .filter((r) => r.similarity > 0.45)
+      .map((r) => truncateContext(r.content, 350))
+      .join("\n\n---\n\n");
+  }
+
+  let noteRagContext = "";
+  if (query && noteEmbeddingCount > 0) {
+    const results = await searchPaperNoteContext(
+      paperId,
+      query,
+      noteRagLimit,
+      userApiKey,
+      userBaseUrl,
+      userModel
+    );
+
+    noteRagContext = results
+      .filter((r) => r.similarity > 0.45)
+      .map(
+        (r) =>
+          `[${PAPER_NOTE_CATEGORY_LABELS[r.category]}] ${truncateContext(
+            r.content,
+            240
+          )}`
+      )
+      .join("\n");
+  }
+
+  return {
+    ragContext,
+    noteRagContext,
+    structuredNotesContext,
+    recentSections,
+    hasEmbeddings,
+  };
+}
+
+// ============ Prompt Assembly ============
+
 export async function buildContextPrompt(
   novelId: number,
   chapterNumber: number,
@@ -314,6 +803,7 @@ export async function buildContextPrompt(
 
   const context = await getAIContext(novelId, chapterNumber, {
     query,
+    phase: "outline",
     userApiKey,
     userBaseUrl,
     userModel,
@@ -321,7 +811,6 @@ export async function buildContextPrompt(
 
   const parts: string[] = [];
 
-  // Add recent chapters summary
   if (context.recentChapters.length > 0) {
     parts.push("【前文回顾】");
     for (const ch of context.recentChapters.reverse()) {
@@ -331,41 +820,39 @@ export async function buildContextPrompt(
     }
   }
 
-  // Add RAG context if available
   if (context.ragContext) {
-    parts.push("【相关背景】");
+    parts.push("【相关背景（正文检索）】");
     parts.push(context.ragContext);
     parts.push("");
   }
 
-  // Add notes if requested
   if (includeNotes) {
-    const novel = await db.getNovelById(novelId);
-    if (novel) {
-      const novelNotes = await db.getNovelNotes(novelId);
-      if (novelNotes.length > 0) {
-        parts.push("【创作笔记】");
-        for (const note of novelNotes.slice(0, 5)) {
-          parts.push(`- ${note.title}: ${note.content.slice(0, 200)}`);
-        }
-        parts.push("");
-      }
+    if (context.structuredNotesContext) {
+      parts.push("【灵感笔记（分类）】");
+      parts.push(context.structuredNotesContext);
+      parts.push("");
+    }
+
+    if (context.noteRagContext) {
+      parts.push("【灵感笔记（语义检索）】");
+      parts.push(context.noteRagContext);
+      parts.push("");
     }
   }
 
   return parts.join("\n");
 }
 
-/**
- * Get embedding statistics for a novel
- */
 export async function getNovelEmbeddingStats(novelId: number): Promise<{
   totalChunks: number;
+  noteChunks: number;
   isConfigured: boolean;
 }> {
   const totalChunks = await db.getEmbeddingCount(novelId);
+  const noteChunks = await db.getNovelNoteEmbeddingCount(novelId);
   return {
     totalChunks,
+    noteChunks,
     isConfigured: isEmbeddingConfigured(),
   };
 }

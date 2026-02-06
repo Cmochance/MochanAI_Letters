@@ -19,9 +19,24 @@ export function Navbar({ user }: NavbarProps) {
   const t = useTranslations("nav");
 
   const navItems = [
-    { href: "/", label: t("novels"), icon: BookOpen },
-    { href: "/notes", label: t("notes"), icon: FileText },
-    { href: "/settings", label: t("settings"), icon: Settings },
+    {
+      href: "/novels",
+      label: t("novels"),
+      icon: BookOpen,
+      matchPrefixes: ["/novels", "/chapters", "/ai-", "/export"],
+    },
+    {
+      href: "/papers",
+      label: t("papers"),
+      icon: FileText,
+      matchPrefixes: ["/papers", "/paper-"],
+    },
+    {
+      href: "/settings",
+      label: t("settings"),
+      icon: Settings,
+      matchPrefixes: ["/settings"],
+    },
   ];
 
   const handleSignOut = async () => {
@@ -34,7 +49,7 @@ export function Navbar({ user }: NavbarProps) {
       <div className="max-w-6xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/novels" className="flex items-center gap-2">
             <PenTool className="w-6 h-6 text-primary" />
             <span className="text-xl font-serif font-bold text-foreground">
               Letters
@@ -45,10 +60,9 @@ export function Navbar({ user }: NavbarProps) {
           <div className="flex items-center gap-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
+              const isActive = item.matchPrefixes.some((prefix) =>
+                pathname.startsWith(prefix)
+              );
 
               return (
                 <Link

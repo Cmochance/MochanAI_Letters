@@ -1,32 +1,60 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+const LOGIN_NOTICE = "请登陆后使用";
+
+function hasSupabaseAuthCookie(request: NextRequest) {
+  return request.cookies.getAll().some((cookie) => {
+    return cookie.name.startsWith("sb-") && cookie.name.endsWith("-auth-token");
+  });
+}
+
+function buildLoginRedirect(request: NextRequest) {
+  const loginUrl = request.nextUrl.clone();
+  const nextPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+  loginUrl.pathname = "/login";
+  loginUrl.searchParams.set("notice", LOGIN_NOTICE);
+  loginUrl.searchParams.set("next", nextPath);
+  return NextResponse.redirect(loginUrl);
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const hasAuthCookie = hasSupabaseAuthCookie(request);
 
-  // Check for Supabase auth cookie
-  const hasAuthCookie = request.cookies.getAll().some(
-    (cookie) => cookie.name.startsWith("sb-") && cookie.name.endsWith("-auth-token")
+  const protectedPrefixes = [
+    "/novels",
+    "/chapters",
+    "/notes",
+    "/settings",
+    "/ai-",
+    "/export",
+    "/papers",
+    "/paper-sections",
+    "/paper-ai",
+    "/paper-export",
+  ];
+  const isProtectedPath = protectedPrefixes.some((prefix) =>
+    pathname.startsWith(prefix)
   );
 
-  // Protected routes - redirect to login if not authenticated
-  const protectedPaths = ["/novels", "/chapters", "/notes", "/settings", "/ai-", "/export"];
-  const isProtectedPath =
-    pathname === "/" ||
-    protectedPaths.some((path) => pathname.startsWith(path));
-
   if (isProtectedPath && !hasAuthCookie) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+    return buildLoginRedirect(request);
   }
 
-  // Redirect authenticated users away from auth pages
   const authPaths = ["/login", "/register"];
   const isAuthPath = authPaths.some((path) => pathname.startsWith(path));
 
   if (isAuthPath && hasAuthCookie) {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    const next = request.nextUrl.searchParams.get("next");
+    if (next && next.startsWith("/")) {
+      const nextUrl = new URL(next, request.url);
+      url.pathname = nextUrl.pathname;
+      url.search = nextUrl.search;
+    } else {
+      url.pathname = "/novels";
+      url.search = "";
+    }
     return NextResponse.redirect(url);
   }
 

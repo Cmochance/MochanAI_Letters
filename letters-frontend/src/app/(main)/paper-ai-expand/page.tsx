@@ -7,15 +7,15 @@ import { trpc } from "@/lib/trpc";
 import { countWords } from "@/lib/utils";
 import { ArrowLeft, Sparkles, Copy, Check, FileText, RefreshCw } from "lucide-react";
 
-export default function AIExpandPage() {
+export default function PaperAIExpandPage() {
   const searchParams = useSearchParams();
-  const novelId = Number(searchParams.get("novelId"));
+  const paperId = Number(searchParams.get("paperId"));
   const planDocumentId = Number(searchParams.get("planDocumentId"));
   const version = Number(searchParams.get("version"));
   const initialOutline = searchParams.get("outline") || "";
 
   const [outline, setOutline] = useState(initialOutline);
-  const [targetWords, setTargetWords] = useState(4000);
+  const [targetWords, setTargetWords] = useState(2500);
   const [expandedContent, setExpandedContent] = useState("");
   const [copied, setCopied] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
@@ -39,14 +39,14 @@ export default function AIExpandPage() {
     setOutline(text);
   }, [planQuery.data, outline]);
 
-  const expandContentAsync = trpc.ai.expandContentAsync.useMutation({
+  const expandContentAsync = trpc.paperAi.expandContentAsync.useMutation({
     onSuccess: (data) => {
       setExpandedContent("");
       setJobId(data.jobId);
     },
   });
 
-  const expandJobQuery = trpc.ai.getExpandJob.useQuery(
+  const expandJobQuery = trpc.paperAi.getExpandJob.useQuery(
     { jobId: jobId || -1 },
     {
       enabled: Boolean(jobId),
@@ -68,9 +68,9 @@ export default function AIExpandPage() {
   }, [expandJobQuery.data]);
 
   const handleExpand = () => {
-    if (!novelId || !outline.trim()) return;
+    if (!paperId || !outline.trim()) return;
     expandContentAsync.mutate({
-      novelId,
+      paperId,
       outline,
       targetWords,
       planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
@@ -95,13 +95,13 @@ export default function AIExpandPage() {
     return status;
   }, [expandJobQuery.data?.status]);
 
-  if (!novelId) {
+  if (!paperId) {
     return (
       <div className="content-container">
         <div className="text-center py-20">
-          <p className="text-muted">请从小说详情页进入</p>
-          <Link href="/novels" className="btn-primary mt-4 inline-block">
-            返回小说列表
+          <p className="text-muted">请从论文详情页进入</p>
+          <Link href="/papers" className="btn-primary mt-4 inline-block">
+            返回论文列表
           </Link>
         </div>
       </div>
@@ -112,13 +112,13 @@ export default function AIExpandPage() {
     <div className="content-container">
       <div className="flex items-center gap-4 mb-8">
         <Link
-          href={`/novels/${novelId}`}
+          href={`/papers/${paperId}`}
           className="p-2 rounded-lg hover:bg-muted/10 transition-colors"
         >
           <ArrowLeft className="w-5 h-5 text-muted" />
         </Link>
         <div>
-          <h1 className="page-title mb-0">AI 内容扩写</h1>
+          <h1 className="page-title mb-0">AI 论文扩写</h1>
           <p className="text-muted text-sm">异步任务模式，支持轮询状态与失败重试</p>
         </div>
       </div>
@@ -126,12 +126,12 @@ export default function AIExpandPage() {
       <div className="card mb-6">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2">章节大纲</label>
+            <label className="block text-sm font-medium mb-2">论文提纲</label>
             <textarea
               value={outline}
               onChange={(e) => setOutline(e.target.value)}
-              className="textarea min-h-[200px]"
-              placeholder="请输入章节大纲，包括主题、情节框架、冲突点等..."
+              className="textarea min-h-[220px]"
+              placeholder="请输入论文小节提纲..."
             />
           </div>
           <div className="flex items-end gap-4">
@@ -143,7 +143,7 @@ export default function AIExpandPage() {
                 onChange={(e) => setTargetWords(Number(e.target.value))}
                 className="input"
                 min={1000}
-                max={12000}
+                max={10000}
                 step={500}
               />
             </div>

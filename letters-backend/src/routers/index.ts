@@ -6,6 +6,12 @@ import { notesRouter } from "./notes.js";
 import { exportRouter } from "./export.js";
 import { settingsRouter } from "./settings.js";
 import { backupRouter } from "./backup.js";
+import { plansRouter } from "./plans.js";
+import { papersRouter } from "./papers.js";
+import { paperSectionsRouter } from "./paperSections.js";
+import { paperNotesRouter } from "./paperNotes.js";
+import { paperAiRouter } from "./paperAi.js";
+import { paperExportRouter } from "./paperExport.js";
 
 export const appRouter = router({
   // System routes
@@ -29,6 +35,12 @@ export const appRouter = router({
   export: exportRouter,
   settings: settingsRouter,
   backup: backupRouter,
+  plans: plansRouter,
+  papers: papersRouter,
+  paperSections: paperSectionsRouter,
+  paperNotes: paperNotesRouter,
+  paperAi: paperAiRouter,
+  paperExport: paperExportRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,10 +1,21 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const LOGIN_NOTICE = "请登陆后使用";
+
+function buildLoginRedirect(request: NextRequest) {
+  const url = request.nextUrl.clone();
+  url.pathname = "/login";
+  url.searchParams.set(
+    "next",
+    `${request.nextUrl.pathname}${request.nextUrl.search}`
+  );
+  url.searchParams.set("notice", LOGIN_NOTICE);
+  return NextResponse.redirect(url);
+}
+
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
+  let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,12 +26,8 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({
-            request,
-          });
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );
@@ -29,30 +36,31 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // IMPORTANT: Avoid writing any logic between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protected routes - redirect to login if not authenticated
-  const protectedPaths = ["/", "/novels", "/chapters", "/notes", "/settings", "/ai-", "/export"];
-  const isProtectedPath = protectedPaths.some((path) => {
-    if (path === "/") {
-      return request.nextUrl.pathname === "/";
-    }
-    return request.nextUrl.pathname.startsWith(path);
-  });
+  const protectedPrefixes = [
+    "/novels",
+    "/chapters",
+    "/notes",
+    "/settings",
+    "/ai-",
+    "/export",
+    "/papers",
+    "/paper-sections",
+    "/paper-ai",
+    "/paper-export",
+  ];
+
+  const isProtectedPath = protectedPrefixes.some((prefix) =>
+    request.nextUrl.pathname.startsWith(prefix)
+  );
 
   if (isProtectedPath && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+    return buildLoginRedirect(request);
   }
 
-  // Redirect authenticated users away from auth pages
   const authPaths = ["/login", "/register"];
   const isAuthPath = authPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
@@ -60,22 +68,17 @@ export async function updateSession(request: NextRequest) {
 
   if (isAuthPath && user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    const next = request.nextUrl.searchParams.get("next");
+    if (next && next.startsWith("/")) {
+      const nextUrl = new URL(next, request.url);
+      url.pathname = nextUrl.pathname;
+      url.search = nextUrl.search;
+    } else {
+      url.pathname = "/novels";
+      url.search = "";
+    }
     return NextResponse.redirect(url);
   }
-
-  // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
-  // creating a new response object with NextResponse.next() make sure to:
-  // 1. Pass the request in it, like so:
-  //    const myNewResponse = NextResponse.next({ request })
-  // 2. Copy over the cookies, like so:
-  //    myNewResponse.cookies.setAll(supabaseResponse.cookies.getAll())
-  // 3. Change the myNewResponse object to fit your needs, but avoid changing
-  //    the cookies!
-  // 4. Finally:
-  //    return myNewResponse
-  // If this is not done, you may be causing the browser and server to go out
-  // of sync and terminate the user's session prematurely!
 
   return supabaseResponse;
 }

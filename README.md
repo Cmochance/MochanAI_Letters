@@ -99,6 +99,8 @@ NODE_ENV=development
 
 # CORS
 CORS_ORIGIN=http://localhost:3001
+# Optional: regex allowlist (e.g. Vercel preview domains)
+CORS_ORIGIN_PATTERN=^https://.*\\.vercel\\.app$
 ```
 
 ### 3. 启用 pgvector 扩展
@@ -151,14 +153,26 @@ docker run -d -p 3000:3000 --env-file .env letters-backend
 docker-compose up -d
 ```
 
+### 网关超时建议（Nginx）
+
+为异步任务提交接口保留充足代理超时时间（即使主链路已异步化，仍建议统一配置）：
+
+```nginx
+proxy_connect_timeout 300s;
+proxy_send_timeout 300s;
+proxy_read_timeout 300s;
+```
+
 ## 功能特性
 
 - 📚 **小说管理** - 创建、编辑、删除小说
 - 🖼️ **智能封面** - 新建小说自动生成封面，可手动重新生成
 - 📝 **章节编辑** - 富文本编辑器，自动保存
 - 🤖 **AI 辅助** - 章节规划、内容扩写
+- 📄 **论文工作区** - 论文/小节/研究笔记全流程
 - 🔍 **RAG 检索** - 基于小说全文的智能上下文检索
 - 💡 **灵感笔记** - 5 种分类，关联小说
+- ⏱️ **异步扩写任务** - 轮询任务状态，避免长请求超时
 - 📤 **多格式导出** - TXT、Markdown、ePub
 - 🎨 **水墨风格** - 传统美学设计
 - ☁️ **云端存储** - Cloudflare R2 文件存储

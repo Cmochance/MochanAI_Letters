@@ -75,7 +75,7 @@ export default function NovelDetailPage() {
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
         <Link
-          href="/"
+          href="/novels"
           className="p-2 rounded-lg hover:bg-muted/10 transition-colors"
         >
           <ArrowLeft className="w-5 h-5 text-muted" />
@@ -102,7 +102,7 @@ export default function NovelDetailPage() {
           AI 规划
         </Link>
         <Link
-          href={`/notes?novelId=${novelId}`}
+          href={`/novels/${novelId}/notes`}
           className="btn-secondary flex items-center gap-2"
         >
           <FileText className="w-4 h-4" />

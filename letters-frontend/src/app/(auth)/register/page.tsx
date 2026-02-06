@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/hooks/use-auth";
@@ -9,6 +9,7 @@ import { LanguageSwitcher } from "@/components/language-switcher";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signUpWithEmail } = useAuth();
   const t = useTranslations("auth");
   const tc = useTranslations("common");
@@ -19,6 +20,10 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const nextPath = (() => {
+    const raw = searchParams.get("next") || "/novels";
+    return raw.startsWith("/") ? raw : "/novels";
+  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +45,7 @@ export default function RegisterPage() {
       const { session } = await signUpWithEmail(email, password, name);
       // If email confirmation is disabled, user will be logged in immediately
       if (session) {
-        router.push("/");
+        router.push(nextPath);
       } else {
         // Email confirmation is enabled, show success message
         setSuccess(true);

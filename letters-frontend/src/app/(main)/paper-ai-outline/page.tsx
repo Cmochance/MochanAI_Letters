@@ -15,11 +15,11 @@ type OutlineState = {
   version: number;
 } | null;
 
-export default function AIOutlinePage() {
+export default function PaperAIOutlinePage() {
   const searchParams = useSearchParams();
-  const novelId = Number(searchParams.get("novelId"));
+  const paperId = Number(searchParams.get("paperId"));
 
-  const [chapterNumber, setChapterNumber] = useState(1);
+  const [sectionNumber, setSectionNumber] = useState(1);
   const [outline, setOutline] = useState<OutlineState>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
@@ -29,12 +29,12 @@ export default function AIOutlinePage() {
 
   const latestPlanQuery = trpc.plans.getLatest.useQuery(
     {
-      workspaceType: "novel",
-      workspaceId: novelId,
-      sectionNumber: chapterNumber,
+      workspaceType: "paper",
+      workspaceId: paperId,
+      sectionNumber,
     },
     {
-      enabled: Number.isFinite(novelId) && novelId > 0,
+      enabled: Number.isFinite(paperId) && paperId > 0,
     }
   );
 
@@ -69,7 +69,7 @@ export default function AIOutlinePage() {
     setRestored(true);
   }, [latestPlanQuery.data]);
 
-  const generateOutline = trpc.ai.generateOutline.useMutation({
+  const generateOutline = trpc.paperAi.generateOutline.useMutation({
     onSuccess: (data) => {
       setOutline({
         theme: data.theme,
@@ -82,9 +82,9 @@ export default function AIOutlinePage() {
       setSelectedVersion(data.version);
       setRestored(false);
       utils.plans.getLatest.invalidate({
-        workspaceType: "novel",
-        workspaceId: novelId,
-        sectionNumber: chapterNumber,
+        workspaceType: "paper",
+        workspaceId: paperId,
+        sectionNumber,
       });
       utils.plans.listVersions.invalidate({
         planDocumentId: data.planDocumentId,
@@ -93,9 +93,9 @@ export default function AIOutlinePage() {
   });
 
   const handleGenerate = () => {
-    if (!novelId) return;
+    if (!paperId) return;
     setRestored(false);
-    generateOutline.mutate({ novelId, chapterNumber });
+    generateOutline.mutate({ paperId, sectionNumber });
   };
 
   const handleCopy = async (text: string, field: string) => {
@@ -131,13 +131,13 @@ export default function AIOutlinePage() {
     return `${outline.theme}\n\n${outline.framework}\n\n${outline.conflicts}\n\n${outline.interactions}`;
   }, [outline]);
 
-  if (!novelId) {
+  if (!paperId) {
     return (
       <div className="content-container">
         <div className="text-center py-20">
-          <p className="text-muted">请从小说详情页进入</p>
-          <Link href="/novels" className="btn-primary mt-4 inline-block">
-            返回小说列表
+          <p className="text-muted">请从论文详情页进入</p>
+          <Link href="/papers" className="btn-primary mt-4 inline-block">
+            返回论文列表
           </Link>
         </div>
       </div>
@@ -148,13 +148,13 @@ export default function AIOutlinePage() {
     <div className="content-container">
       <div className="flex items-center gap-4 mb-8">
         <Link
-          href={`/novels/${novelId}`}
+          href={`/papers/${paperId}`}
           className="p-2 rounded-lg hover:bg-muted/10 transition-colors"
         >
           <ArrowLeft className="w-5 h-5 text-muted" />
         </Link>
         <div>
-          <h1 className="page-title mb-0">AI 章节规划</h1>
+          <h1 className="page-title mb-0">AI 论文规划</h1>
           <p className="text-muted text-sm">生成后自动保存，可跨会话恢复</p>
         </div>
       </div>
@@ -162,14 +162,14 @@ export default function AIOutlinePage() {
       <div className="card mb-6">
         <div className="flex items-end gap-4">
           <div className="flex-1">
-            <label className="block text-sm font-medium mb-2">章节序号</label>
+            <label className="block text-sm font-medium mb-2">小节序号</label>
             <input
               type="number"
-              value={chapterNumber}
-              onChange={(e) => setChapterNumber(Number(e.target.value || 1))}
+              value={sectionNumber}
+              onChange={(e) => setSectionNumber(Number(e.target.value || 1))}
               className="input"
               min={1}
-              placeholder="请输入章节序号"
+              placeholder="请输入小节序号"
             />
           </div>
           <button
@@ -184,7 +184,7 @@ export default function AIOutlinePage() {
 
         {restored && outline && (
           <div className="mt-4 p-3 bg-primary/10 border border-primary/20 rounded-lg text-sm text-primary">
-            已恢复第 {chapterNumber} 章的最新规划（v{outline.version}）
+            已恢复第 {sectionNumber} 节的最新规划（v{outline.version}）
           </div>
         )}
       </div>
@@ -228,12 +228,12 @@ export default function AIOutlinePage() {
           </div>
 
           {[
-            { key: "theme", label: "章节主题", content: outline.theme },
-            { key: "framework", label: "情节框架", content: outline.framework },
-            { key: "conflicts", label: "关键冲突", content: outline.conflicts },
+            { key: "theme", label: "核心论点", content: outline.theme },
+            { key: "framework", label: "论证结构", content: outline.framework },
+            { key: "conflicts", label: "争议与风险", content: outline.conflicts },
             {
               key: "interactions",
-              label: "人物互动",
+              label: "证据与衔接",
               content: outline.interactions,
             },
           ].map((item) => (
@@ -259,7 +259,7 @@ export default function AIOutlinePage() {
 
           <div className="flex gap-3">
             <Link
-              href={`/ai-expand?novelId=${novelId}&planDocumentId=${outline.planDocumentId}&version=${outline.version}`}
+              href={`/paper-ai-expand?paperId=${paperId}&planDocumentId=${outline.planDocumentId}&version=${outline.version}`}
               className="btn-primary flex items-center gap-2"
             >
               <Sparkles className="w-4 h-4" />

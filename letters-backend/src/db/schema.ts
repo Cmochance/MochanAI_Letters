@@ -3,6 +3,7 @@ import {
   integer,
   pgEnum,
   pgTable,
+  unique,
   serial,
   text,
   timestamp,
@@ -150,6 +151,24 @@ export const noteCategory = pgEnum("note_category", [
   "other",
 ]);
 
+export const workspaceType = pgEnum("workspace_type", ["novel", "paper"]);
+export const expandJobStatus = pgEnum("expand_job_status", [
+  "pending",
+  "running",
+  "succeeded",
+  "failed",
+  "canceled",
+]);
+export const paperNoteCategory = pgEnum("paper_note_category", [
+  "research_question",
+  "literature_review",
+  "methodology",
+  "data_experiment",
+  "result_analysis",
+  "discussion_limitations",
+  "citations_todo",
+]);
+
 /**
  * Notes table - stores inspiration notes
  */
@@ -170,3 +189,199 @@ export const notes = pgTable("notes", {
 
 export type Note = typeof notes.$inferSelect;
 export type InsertNote = typeof notes.$inferInsert;
+
+/**
+ * Novel note embeddings for mixed-context retrieval
+ */
+export const noteEmbeddings = pgTable("note_embeddings", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  noteId: integer("note_id")
+    .notNull()
+    .references(() => notes.id, { onDelete: "cascade" }),
+  novelId: integer("novel_id")
+    .notNull()
+    .references(() => novels.id, { onDelete: "cascade" }),
+  category: noteCategory("category").notNull(),
+  contentChunk: text("content_chunk").notNull(),
+  embedding: vector("embedding").notNull(),
+  chunkIndex: integer("chunk_index").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type NoteEmbedding = typeof noteEmbeddings.$inferSelect;
+export type InsertNoteEmbedding = typeof noteEmbeddings.$inferInsert;
+
+/**
+ * Persisted AI outline documents and version history
+ */
+export const aiPlanDocuments = pgTable(
+  "ai_plan_documents",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceType: workspaceType("workspace_type").notNull(),
+    workspaceId: integer("workspace_id").notNull(),
+    sectionNumber: integer("section_number").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userWorkspaceSectionUnique: unique("ai_plan_documents_scope_unique").on(
+      table.userId,
+      table.workspaceType,
+      table.workspaceId,
+      table.sectionNumber
+    ),
+  })
+);
+
+export type AIPlanDocument = typeof aiPlanDocuments.$inferSelect;
+export type InsertAIPlanDocument = typeof aiPlanDocuments.$inferInsert;
+
+export const aiPlanVersions = pgTable(
+  "ai_plan_versions",
+  {
+    id: serial("id").primaryKey(),
+    documentId: integer("document_id")
+      .notNull()
+      .references(() => aiPlanDocuments.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    theme: text("theme").notNull(),
+    framework: text("framework").notNull(),
+    conflicts: text("conflicts").notNull(),
+    interactions: text("interactions").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    documentVersionUnique: unique("ai_plan_versions_unique").on(
+      table.documentId,
+      table.version
+    ),
+  })
+);
+
+export type AIPlanVersion = typeof aiPlanVersions.$inferSelect;
+export type InsertAIPlanVersion = typeof aiPlanVersions.$inferInsert;
+
+/**
+ * Async expansion jobs (novel + paper)
+ */
+export const aiExpandJobs = pgTable("ai_expand_jobs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  workspaceType: workspaceType("workspace_type").notNull(),
+  workspaceId: integer("workspace_id").notNull(),
+  outline: text("outline").notNull(),
+  targetWords: integer("target_words").default(4000).notNull(),
+  planDocumentId: integer("plan_document_id").references(() => aiPlanDocuments.id, {
+    onDelete: "set null",
+  }),
+  status: expandJobStatus("status").default("pending").notNull(),
+  resultContent: text("result_content"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type AIExpandJob = typeof aiExpandJobs.$inferSelect;
+export type InsertAIExpandJob = typeof aiExpandJobs.$inferInsert;
+
+/**
+ * Papers domain (parallel to novels)
+ */
+export const papers = pgTable("papers", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  totalWords: integer("total_words").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Paper = typeof papers.$inferSelect;
+export type InsertPaper = typeof papers.$inferInsert;
+
+export const paperSections = pgTable("paper_sections", {
+  id: serial("id").primaryKey(),
+  paperId: integer("paper_id")
+    .notNull()
+    .references(() => papers.id, { onDelete: "cascade" }),
+  sectionNumber: integer("section_number").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  wordCount: integer("word_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type PaperSection = typeof paperSections.$inferSelect;
+export type InsertPaperSection = typeof paperSections.$inferInsert;
+
+export const paperSectionEmbeddings = pgTable("paper_section_embeddings", {
+  id: serial("id").primaryKey(),
+  sectionId: integer("section_id")
+    .notNull()
+    .references(() => paperSections.id, { onDelete: "cascade" }),
+  paperId: integer("paper_id")
+    .notNull()
+    .references(() => papers.id, { onDelete: "cascade" }),
+  contentChunk: text("content_chunk").notNull(),
+  embedding: vector("embedding").notNull(),
+  chunkIndex: integer("chunk_index").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type PaperSectionEmbedding = typeof paperSectionEmbeddings.$inferSelect;
+export type InsertPaperSectionEmbedding =
+  typeof paperSectionEmbeddings.$inferInsert;
+
+export const paperNotes = pgTable("paper_notes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  paperId: integer("paper_id")
+    .notNull()
+    .references(() => papers.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  category: paperNoteCategory("category").default("research_question").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type PaperNote = typeof paperNotes.$inferSelect;
+export type InsertPaperNote = typeof paperNotes.$inferInsert;
+
+export const paperNoteEmbeddings = pgTable("paper_note_embeddings", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  noteId: integer("note_id")
+    .notNull()
+    .references(() => paperNotes.id, { onDelete: "cascade" }),
+  paperId: integer("paper_id")
+    .notNull()
+    .references(() => papers.id, { onDelete: "cascade" }),
+  category: paperNoteCategory("category").notNull(),
+  contentChunk: text("content_chunk").notNull(),
+  embedding: vector("embedding").notNull(),
+  chunkIndex: integer("chunk_index").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type PaperNoteEmbedding = typeof paperNoteEmbeddings.$inferSelect;
+export type InsertPaperNoteEmbedding = typeof paperNoteEmbeddings.$inferInsert;

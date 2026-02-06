@@ -3,17 +3,11 @@ import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
 import * as db from "../db/queries.js";
 import {
-  generateChapterOutline,
-  expandChapterContent,
+  expandPaperContent,
+  generatePaperOutline,
   getOutlineFromStoredPlan,
   outlineToText,
 } from "../services/ai.js";
-import {
-  vectorizeChapter,
-  vectorizeNovel,
-  getNovelEmbeddingStats,
-  searchRAGContext,
-} from "../services/rag.js";
 
 function getJobErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -22,7 +16,15 @@ function getJobErrorMessage(error: unknown) {
   return "Unknown expansion error";
 }
 
-async function processNovelExpandJob(jobId: number, userId: number) {
+async function ensurePaperOwner(userId: number, paperId: number) {
+  const paper = await db.getPaperById(paperId);
+  if (!paper || paper.userId !== userId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Paper not found" });
+  }
+  return paper;
+}
+
+async function processPaperExpandJob(jobId: number, userId: number) {
   const settings = await db.getUserSettings(userId);
   const job = await db.getExpandJobById(userId, jobId);
 
@@ -34,7 +36,7 @@ async function processNovelExpandJob(jobId: number, userId: number) {
   });
 
   try {
-    const content = await expandChapterContent(
+    const content = await expandPaperContent(
       job.workspaceId,
       job.outline,
       settings?.writingStyle || null,
@@ -54,7 +56,8 @@ async function processNovelExpandJob(jobId: number, userId: number) {
       finishedAt: new Date(),
     });
   } catch (error) {
-    console.error("Novel expand job failed", { jobId, userId, error });
+    console.error("Paper expand job failed", { jobId, userId, error });
+
     await db.updateExpandJob(jobId, userId, {
       status: "failed",
       errorMessage: getJobErrorMessage(error),
@@ -104,25 +107,21 @@ async function resolveOutlineFromInput(
   };
 }
 
-export const aiRouter = router({
+export const paperAiRouter = router({
   generateOutline: protectedProcedure
     .input(
       z.object({
-        novelId: z.number(),
-        chapterNumber: z.number().min(1),
+        paperId: z.number(),
+        sectionNumber: z.number().min(1),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const novel = await db.getNovelById(input.novelId);
-      if (!novel || novel.userId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Novel not found" });
-      }
+      await ensurePaperOwner(ctx.user.id, input.paperId);
 
       const settings = await db.getUserSettings(ctx.user.id);
-
-      const outline = await generateChapterOutline(
-        input.novelId,
-        input.chapterNumber,
+      const outline = await generatePaperOutline(
+        input.paperId,
+        input.sectionNumber,
         settings?.apiKey || undefined,
         settings?.apiBaseUrl || undefined,
         settings?.modelName || undefined,
@@ -133,9 +132,9 @@ export const aiRouter = router({
 
       const saved = await db.createPlanVersion(
         ctx.user.id,
-        "novel",
-        input.novelId,
-        input.chapterNumber,
+        "paper",
+        input.paperId,
+        input.sectionNumber,
         outline
       );
 
@@ -149,7 +148,7 @@ export const aiRouter = router({
   expandContent: protectedProcedure
     .input(
       z.object({
-        novelId: z.number(),
+        paperId: z.number(),
         outline: z.string().optional(),
         targetWords: z.number().optional(),
         planDocumentId: z.number().optional(),
@@ -157,19 +156,16 @@ export const aiRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const novel = await db.getNovelById(input.novelId);
-      if (!novel || novel.userId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Novel not found" });
-      }
+      await ensurePaperOwner(ctx.user.id, input.paperId);
 
       const settings = await db.getUserSettings(ctx.user.id);
       const { outlineText } = await resolveOutlineFromInput(ctx.user.id, input);
 
-      const content = await expandChapterContent(
-        input.novelId,
+      const content = await expandPaperContent(
+        input.paperId,
         outlineText,
         settings?.writingStyle || null,
-        input.targetWords || 4000,
+        input.targetWords || 2500,
         settings?.apiKey || undefined,
         settings?.apiBaseUrl || undefined,
         settings?.modelName || undefined,
@@ -184,18 +180,15 @@ export const aiRouter = router({
   expandContentAsync: protectedProcedure
     .input(
       z.object({
-        novelId: z.number(),
+        paperId: z.number(),
         outline: z.string().optional(),
-        targetWords: z.number().min(500).max(20000).optional(),
+        targetWords: z.number().min(500).max(15000).optional(),
         planDocumentId: z.number().optional(),
         version: z.number().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const novel = await db.getNovelById(input.novelId);
-      if (!novel || novel.userId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Novel not found" });
-      }
+      await ensurePaperOwner(ctx.user.id, input.paperId);
 
       const { outlineText, planDocumentId } = await resolveOutlineFromInput(
         ctx.user.id,
@@ -204,17 +197,17 @@ export const aiRouter = router({
 
       const job = await db.createExpandJob({
         userId: ctx.user.id,
-        workspaceType: "novel",
-        workspaceId: input.novelId,
+        workspaceType: "paper",
+        workspaceId: input.paperId,
         outline: outlineText,
-        targetWords: input.targetWords || 4000,
+        targetWords: input.targetWords || 2500,
         planDocumentId,
         status: "pending",
       });
 
       setTimeout(() => {
-        processNovelExpandJob(job.id, ctx.user.id).catch((error) => {
-          console.error("Failed to process novel expand job", {
+        processPaperExpandJob(job.id, ctx.user.id).catch((error) => {
+          console.error("Failed to process paper expand job", {
             jobId: job.id,
             userId: ctx.user.id,
             error,
@@ -236,7 +229,7 @@ export const aiRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const job = await db.getExpandJobById(ctx.user.id, input.jobId);
-      if (!job || job.workspaceType !== "novel") {
+      if (!job || job.workspaceType !== "paper") {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "扩写任务不存在",
@@ -252,76 +245,5 @@ export const aiRouter = router({
         startedAt: job.startedAt,
         finishedAt: job.finishedAt,
       };
-    }),
-
-  vectorizeChapter: protectedProcedure
-    .input(
-      z.object({
-        chapterId: z.number(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const settings = await db.getUserSettings(ctx.user.id);
-
-      const result = await vectorizeChapter(
-        input.chapterId,
-        settings?.embeddingApiKey || undefined,
-        settings?.embeddingBaseUrl || undefined,
-        settings?.embeddingModel || undefined
-      );
-
-      return result;
-    }),
-
-  vectorizeNovel: protectedProcedure
-    .input(
-      z.object({
-        novelId: z.number(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const settings = await db.getUserSettings(ctx.user.id);
-
-      const result = await vectorizeNovel(
-        input.novelId,
-        settings?.embeddingApiKey || undefined,
-        settings?.embeddingBaseUrl || undefined,
-        settings?.embeddingModel || undefined
-      );
-
-      return result;
-    }),
-
-  getEmbeddingStats: protectedProcedure
-    .input(
-      z.object({
-        novelId: z.number(),
-      })
-    )
-    .query(async ({ input }) => {
-      return getNovelEmbeddingStats(input.novelId);
-    }),
-
-  searchContext: protectedProcedure
-    .input(
-      z.object({
-        novelId: z.number(),
-        query: z.string(),
-        limit: z.number().optional(),
-      })
-    )
-    .query(async ({ ctx, input }) => {
-      const settings = await db.getUserSettings(ctx.user.id);
-
-      const results = await searchRAGContext(
-        input.novelId,
-        input.query,
-        input.limit || 5,
-        settings?.embeddingApiKey || undefined,
-        settings?.embeddingBaseUrl || undefined,
-        settings?.embeddingModel || undefined
-      );
-
-      return results;
     }),
 });

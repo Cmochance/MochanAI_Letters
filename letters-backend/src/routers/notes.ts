@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
 import * as db from "../db/queries.js";
+import { vectorizeNote } from "../services/rag.js";
 
 const categorySchema = z.enum([
   "inspiration",
@@ -11,9 +12,25 @@ const categorySchema = z.enum([
   "other",
 ]);
 
+async function triggerNoteVectorization(userId: number, noteId: number) {
+  const settings = await db.getUserSettings(userId);
+  vectorizeNote(
+    noteId,
+    settings?.embeddingApiKey || undefined,
+    settings?.embeddingBaseUrl || undefined,
+    settings?.embeddingModel || undefined
+  ).catch((error) => {
+    console.error("Failed to vectorize note", { userId, noteId, error });
+  });
+}
+
 export const notesRouter = router({
   list: protectedProcedure.query(({ ctx }) => {
     return db.getUserNotes(ctx.user.id);
+  }),
+
+  unbound: protectedProcedure.query(({ ctx }) => {
+    return db.getUserUnboundNotes(ctx.user.id);
   }),
 
   byCategory: protectedProcedure
@@ -66,6 +83,9 @@ export const notesRouter = router({
         category: input.category,
         novelId: input.novelId,
       });
+
+      await triggerNoteVectorization(ctx.user.id, noteId);
+
       return { id: noteId };
     }),
 
@@ -102,6 +122,32 @@ export const notesRouter = router({
         category: input.category,
         novelId: input.novelId,
       });
+
+      await triggerNoteVectorization(ctx.user.id, input.noteId);
+      return { success: true };
+    }),
+
+  assignToNovel: protectedProcedure
+    .input(
+      z.object({
+        noteId: z.number(),
+        novelId: z.number(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const note = await db.getUserNoteById(ctx.user.id, input.noteId);
+      if (!note) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Note not found" });
+      }
+
+      const novel = await db.getNovelById(input.novelId);
+      if (!novel || novel.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Novel not found" });
+      }
+
+      await db.updateNote(input.noteId, { novelId: input.novelId });
+      await triggerNoteVectorization(ctx.user.id, input.noteId);
+
       return { success: true };
     }),
 
