@@ -31,7 +31,10 @@ type Category = (typeof CATEGORIES)[number]["value"];
 export default function NotesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialNovelId = Number(searchParams.get("novelId"));
+  const novelIdFromQuery = Number(searchParams.get("novelId"));
+  const initialNovelId = novelIdFromQuery;
+  const hasValidNovelIdFromQuery =
+    Number.isFinite(novelIdFromQuery) && novelIdFromQuery > 0;
 
   const [selectedNovelId, setSelectedNovelId] = useState<number | null>(
     Number.isFinite(initialNovelId) && initialNovelId > 0 ? initialNovelId : null
@@ -58,34 +61,28 @@ export default function NotesPage() {
       return;
     }
 
-    const queryNovelId = Number(searchParams.get("novelId"));
     if (
-      Number.isFinite(queryNovelId) &&
-      novels.some((novel) => novel.id === queryNovelId)
+      hasValidNovelIdFromQuery &&
+      novels.some((novel) => novel.id === novelIdFromQuery)
     ) {
-      if (selectedNovelId !== queryNovelId) {
-        setSelectedNovelId(queryNovelId);
+      if (selectedNovelId !== novelIdFromQuery) {
+        setSelectedNovelId(novelIdFromQuery);
       }
       return;
     }
 
-    if (selectedNovelId && novels.some((novel) => novel.id === selectedNovelId)) {
-      return;
+    const fallbackNovelId = novels[0].id;
+    if (selectedNovelId !== fallbackNovelId) {
+      setSelectedNovelId(fallbackNovelId);
     }
-
-    setSelectedNovelId(novels[0].id);
-  }, [novels, searchParams, selectedNovelId]);
-
-  useEffect(() => {
-    if (!selectedNovelId) return;
-
-    const currentNovelId = searchParams.get("novelId");
-    if (currentNovelId === String(selectedNovelId)) return;
-
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("novelId", String(selectedNovelId));
-    router.replace(`/notes?${params.toString()}`);
-  }, [selectedNovelId, searchParams, router]);
+    router.replace(`/notes?novelId=${fallbackNovelId}`);
+  }, [
+    novels,
+    novelIdFromQuery,
+    hasValidNovelIdFromQuery,
+    selectedNovelId,
+    router,
+  ]);
 
   const { data: notes, isLoading: isNotesLoading } = trpc.notes.byNovel.useQuery(
     { novelId: selectedNovelId ?? -1 },
@@ -188,6 +185,12 @@ export default function NotesPage() {
     return cat?.icon || FileText;
   };
 
+  const handleNovelChange = (novelId: number) => {
+    if (!Number.isFinite(novelId) || novelId <= 0) return;
+    if (selectedNovelId === novelId) return;
+    router.replace(`/notes?novelId=${novelId}`);
+  };
+
   if (!isNovelsLoading && novels && novels.length === 0) {
     return (
       <div className="content-container">
@@ -230,7 +233,7 @@ export default function NotesPage() {
         <label className="block text-sm font-medium mb-2">当前小说</label>
         <select
           value={selectedNovelId ?? ""}
-          onChange={(e) => setSelectedNovelId(Number(e.target.value))}
+          onChange={(e) => handleNovelChange(Number(e.target.value))}
           className="input max-w-md"
         >
           {(novels || []).map((novel) => (
