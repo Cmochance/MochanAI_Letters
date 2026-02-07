@@ -29,6 +29,230 @@ const CATEGORIES = [
 
 type Category = (typeof CATEGORIES)[number]["value"];
 
+const NOTE_TEMPLATES: Record<
+  Category,
+  { titlePlaceholder: string; description: string; content: string }
+> = {
+  inspiration: {
+    titlePlaceholder: "例如：雨夜断桥重逢的核心灵感",
+    description: "用于快速捕捉创意火花，并沉淀为可执行剧情素材。",
+    content: `# 灵感模板（可扩展）
+
+## 1. 核心灵感（一句话）
+- [ ] 用一句话说明这个灵感的独特性：
+
+## 2. 触发来源
+- 来源类型：梦境/新闻/历史/他人故事/现实观察/随机联想
+- 触发描述：
+
+## 3. 主题与情绪
+- 主题关键词（3-5个）：
+- 情绪基调（如压抑/昂扬/悬疑/温暖）：
+
+## 4. 场景画面与感官细节
+- 视觉：
+- 听觉：
+- 嗅觉/触觉：
+- 标志性意象（可反复出现）：
+
+## 5. 可发展方向（至少2条）
+- 方向A（主线向）：
+- 方向B（人物向）：
+- 方向C（反转向，可选）：
+
+## 6. 与现有主线的连接
+- 关联角色：
+- 关联冲突：
+- 适合插入章节（起始-结束）：
+- 预计影响（短期/长期）：
+
+## 7. 使用约束与风险
+- 禁止触碰设定：
+- 可能导致逻辑冲突点：
+- 修复方案：
+
+## 8. 下一步行动
+- [ ] 需要补充的信息：
+- [ ] 下一次写作要落地的最小片段：`,
+  },
+  character: {
+    titlePlaceholder: "例如：女主师尊（反派伪装）人物档案",
+    description: "用于角色建档、动机拆解、关系冲突与角色弧线管理。",
+    content: `# 人物模板（可扩展）
+
+## 1. 角色基础档案
+- 姓名/别称：
+- 年龄与外观特征：
+- 身份/阵营/社会位置：
+- 首次出场章节：
+
+## 2. 核心驱动力
+- 表层目标（短期）：
+- 深层目标（长期）：
+- 核心恐惧：
+- 不可退让底线：
+
+## 3. 性格结构
+- 显性性格（对外）：
+- 隐性性格（对内）：
+- 反差点（打破刻板印象）：
+- 习惯性动作/口头禅：
+
+## 4. 背景时间线（关键事件）
+- 事件1（年份/年龄）：
+- 事件2：
+- 事件3：
+- 尚未公开的秘密：
+
+## 5. 能力与限制
+- 核心能力：
+- 资源与人脉：
+- 软肋与限制：
+- 危机状态下的失控表现：
+
+## 6. 关系网络
+- 与主角关系：
+- 与反派关系：
+- 盟友/对手/依附者：
+- 关系变化触发条件：
+
+## 7. 角色弧线（起-承-转-合）
+- 起点状态：
+- 关键转折1：
+- 关键转折2：
+- 终点状态：
+
+## 8. 可调用写作素材
+- 冲突场景清单：
+- 高光台词草案：
+- 伏笔（埋设章 -> 回收章）：`,
+  },
+  worldview: {
+    titlePlaceholder: "例如：宗门护山阵与灵气税制度",
+    description: "用于构建世界规则，保证设定一致、可推演、可用于冲突生成。",
+    content: `# 世界观模板（可扩展）
+
+## 1. 世界一句话定义
+- 这个世界的本质是：
+
+## 2. 时空与地理框架
+- 时代阶段（上古/乱世/近代等）：
+- 核心地域与边界：
+- 交通与通信方式：
+
+## 3. 权力结构
+- 最高权力中心：
+- 地方权力体系：
+- 灰色权力（黑市/宗派/财阀）：
+
+## 4. 规则系统（魔法/修炼/科技）
+- 规则来源：
+- 成本与代价：
+- 上限与禁区：
+- 破例条件：
+
+## 5. 社会与经济
+- 阶层结构：
+- 关键资源（谁掌控、如何流动）：
+- 交易机制与货币：
+- 普通人的生存逻辑：
+
+## 6. 文化、信仰与禁忌
+- 主流价值观：
+- 宗教/仪式：
+- 社会禁忌与惩罚：
+
+## 7. 历史断层与未解事件
+- 历史事件1：
+- 历史事件2：
+- 争议版本（官方 vs 民间）：
+
+## 8. 对主线的约束与增益
+- 能强化冲突的设定：
+- 会限制角色行动的设定：
+- 需提前埋设说明的设定：
+
+## 9. 一致性检查清单
+- [ ] 是否与已有章节冲突
+- [ ] 是否有明确代价
+- [ ] 是否可被角色利用/对抗`,
+  },
+  plot: {
+    titlePlaceholder: "例如：第12-15章围剿线剧情拆解",
+    description: "用于拆分事件链与章节节奏，管理伏笔、冲突升级和回收。",
+    content: `# 情节模板（可扩展）
+
+## 1. 情节目标
+- 本段剧情要达成的结果：
+- 对主线的推进价值：
+
+## 2. 前置条件
+- 已满足条件：
+- 未满足条件（需补写）：
+
+## 3. 事件链（因果）
+- 触发事件：
+- 角色行动：
+- 直接结果：
+- 代价与副作用：
+
+## 4. 冲突升级设计
+- 初级冲突：
+- 中级冲突：
+- 高级冲突（不可逆后果）：
+- 失败分支（若主角失败会怎样）：
+
+## 5. 关键决策点
+- 决策点A（选项与代价）：
+- 决策点B：
+- 道德/价值冲突：
+
+## 6. 伏笔与回收
+- 伏笔1（埋设章 -> 回收章）：
+- 伏笔2：
+- 伪线索/误导：
+
+## 7. 节奏与章节切分
+- 开场钩子：
+- 推进段（信息释放顺序）：
+- 小高潮：
+- 悬念收束句：
+- 建议章节拆分：
+
+## 8. 交付清单
+- [ ] 下一章必须写到的场面
+- [ ] 必须出现的角色
+- [ ] 必须交代的信息`,
+  },
+  other: {
+    titlePlaceholder: "例如：待归档设定与杂项资料",
+    description: "用于承接临时资料，再逐步归并到其他结构化分类中。",
+    content: `# 其他模板（可扩展）
+
+## 1. 条目主题
+- 本条笔记解决的问题：
+
+## 2. 背景说明
+- 来源：
+- 上下文：
+
+## 3. 关键事实/结论
+- 事实1：
+- 事实2：
+- 结论：
+
+## 4. 待办事项
+- [ ] 待核实信息：
+- [ ] 待补充引用或资料：
+- [ ] 待迁移到正式分类：
+
+## 5. 风险与开放问题
+- 当前不确定点：
+- 可能影响章节：
+- 备用方案：`,
+  },
+};
+
 export default function NovelNotesPage() {
   const params = useParams();
   const novelId = Number(params.id);
@@ -40,7 +264,7 @@ export default function NovelNotesPage() {
   const [isEditing, setIsEditing] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     title: "",
-    content: "",
+    content: NOTE_TEMPLATES.inspiration.content,
     category: "inspiration" as Category,
   });
 
@@ -78,8 +302,20 @@ export default function NovelNotesPage() {
     },
   });
 
-  const resetForm = () => {
-    setFormData({ title: "", content: "", category: "inspiration" });
+  const resetForm = (category: Category = "inspiration") => {
+    setFormData({
+      title: "",
+      content: NOTE_TEMPLATES[category].content,
+      category,
+    });
+  };
+
+  const startCreate = () => {
+    const defaultCategory =
+      selectedCategory === "all" ? "inspiration" : selectedCategory;
+    resetForm(defaultCategory);
+    setIsEditing(null);
+    setIsCreating(true);
   };
 
   const handleCreate = () => {
@@ -171,7 +407,7 @@ export default function NovelNotesPage() {
           </p>
         </div>
         <button
-          onClick={() => setIsCreating(true)}
+          onClick={startCreate}
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
@@ -230,7 +466,7 @@ export default function NovelNotesPage() {
                     setFormData({ ...formData, title: e.target.value })
                   }
                   className="input"
-                  placeholder="请输入标题"
+                  placeholder={NOTE_TEMPLATES[formData.category].titlePlaceholder}
                   autoFocus
                 />
               </div>
@@ -244,7 +480,14 @@ export default function NovelNotesPage() {
                         key={cat.value}
                         type="button"
                         onClick={() =>
-                          setFormData({ ...formData, category: cat.value })
+                          setFormData((prev) => ({
+                            ...prev,
+                            category: cat.value,
+                            content:
+                              isEditing === null
+                                ? NOTE_TEMPLATES[cat.value].content
+                                : prev.content,
+                          }))
                         }
                         className={cn(
                           "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2",
@@ -261,14 +504,31 @@ export default function NovelNotesPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">内容</label>
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <label className="block text-sm font-medium">内容</label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        content: NOTE_TEMPLATES[prev.category].content,
+                      }))
+                    }
+                    className="text-xs text-primary hover:underline"
+                  >
+                    重新套用模板
+                  </button>
+                </div>
+                <p className="text-xs text-muted mb-2">
+                  {NOTE_TEMPLATES[formData.category].description}
+                </p>
                 <textarea
                   value={formData.content}
                   onChange={(e) =>
                     setFormData({ ...formData, content: e.target.value })
                   }
-                  className="textarea min-h-[200px]"
-                  placeholder="记录你的灵感..."
+                  className="textarea min-h-[320px]"
+                  placeholder="按模板逐项补充即可"
                 />
               </div>
               <div className="flex gap-3 justify-end">
@@ -312,7 +572,7 @@ export default function NovelNotesPage() {
           <h3 className="text-lg font-medium text-foreground mb-2">还没有笔记</h3>
           <p className="text-muted mb-6">记录你的创作灵感</p>
           <button
-            onClick={() => setIsCreating(true)}
+            onClick={startCreate}
             className="btn-primary inline-flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
