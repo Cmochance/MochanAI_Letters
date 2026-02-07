@@ -278,6 +278,9 @@ export const aiExpandJobs = pgTable("ai_expand_jobs", {
     .references(() => users.id, { onDelete: "cascade" }),
   workspaceType: workspaceType("workspace_type").notNull(),
   workspaceId: integer("workspace_id").notNull(),
+  chapterId: integer("chapter_id").references(() => chapters.id, {
+    onDelete: "set null",
+  }),
   outline: text("outline").notNull(),
   targetWords: integer("target_words").default(4000).notNull(),
   planDocumentId: integer("plan_document_id").references(() => aiPlanDocuments.id, {

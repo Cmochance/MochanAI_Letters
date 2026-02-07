@@ -699,18 +699,23 @@ export async function getExpandJobsByWorkspace(
   userId: number,
   workspaceTypeValue: WorkspaceTypeValue,
   workspaceId: number,
-  limit: number = 10
+  limit: number = 10,
+  chapterId?: number
 ) {
+  const conditions = [
+    eq(aiExpandJobs.userId, userId),
+    eq(aiExpandJobs.workspaceType, workspaceTypeValue),
+    eq(aiExpandJobs.workspaceId, workspaceId),
+  ];
+
+  if (workspaceTypeValue === "novel" && chapterId !== undefined) {
+    conditions.push(eq(aiExpandJobs.chapterId, chapterId));
+  }
+
   return db
     .select()
     .from(aiExpandJobs)
-    .where(
-      and(
-        eq(aiExpandJobs.userId, userId),
-        eq(aiExpandJobs.workspaceType, workspaceTypeValue),
-        eq(aiExpandJobs.workspaceId, workspaceId)
-      )
-    )
+    .where(and(...conditions))
     .orderBy(desc(aiExpandJobs.createdAt))
     .limit(limit);
 }

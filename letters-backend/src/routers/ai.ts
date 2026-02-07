@@ -22,13 +22,18 @@ function getJobErrorMessage(error: unknown) {
   return "Unknown expansion error";
 }
 
-function isMissingAsyncJobTableError(error: unknown): boolean {
+function isMissingAsyncJobSchemaError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
+  const msg = error.message;
   return (
-    error.message.includes("ai_expand_jobs") &&
-    (error.message.includes("does not exist") ||
-      error.message.includes("relation") ||
-      error.message.includes("不存在"))
+    (msg.includes("ai_expand_jobs") &&
+      (msg.includes("does not exist") ||
+        msg.includes("relation") ||
+        msg.includes("不存在"))) ||
+    (msg.includes("chapter_id") &&
+      (msg.includes("does not exist") ||
+        msg.includes("column") ||
+        msg.includes("不存在")))
   );
 }
 
@@ -114,6 +119,18 @@ async function resolveOutlineFromInput(
   };
 }
 
+async function ensureNovelChapterOwner(novelId: number, chapterId?: number) {
+  if (!chapterId) return;
+
+  const chapter = await db.getChapterById(chapterId);
+  if (!chapter || chapter.novelId !== novelId) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Chapter not found",
+    });
+  }
+}
+
 export const aiRouter = router({
   generateOutline: protectedProcedure
     .input(
@@ -160,6 +177,7 @@ export const aiRouter = router({
     .input(
       z.object({
         novelId: z.number(),
+        chapterId: z.number().optional(),
         outline: z.string().optional(),
         targetWords: z.number().optional(),
         planDocumentId: z.number().optional(),
@@ -171,6 +189,7 @@ export const aiRouter = router({
       if (!novel || novel.userId !== ctx.user.id) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Novel not found" });
       }
+      await ensureNovelChapterOwner(input.novelId, input.chapterId);
 
       const settings = await db.getUserSettings(ctx.user.id);
       const { outlineText } = await resolveOutlineFromInput(ctx.user.id, input);
@@ -195,6 +214,7 @@ export const aiRouter = router({
     .input(
       z.object({
         novelId: z.number(),
+        chapterId: z.number().optional(),
         outline: z.string().optional(),
         targetWords: z.number().min(500).max(20000).optional(),
         planDocumentId: z.number().optional(),
@@ -206,6 +226,7 @@ export const aiRouter = router({
       if (!novel || novel.userId !== ctx.user.id) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Novel not found" });
       }
+      await ensureNovelChapterOwner(input.novelId, input.chapterId);
 
       const { outlineText, planDocumentId } = await resolveOutlineFromInput(
         ctx.user.id,
@@ -218,17 +239,18 @@ export const aiRouter = router({
           userId: ctx.user.id,
           workspaceType: "novel",
           workspaceId: input.novelId,
+          chapterId: input.chapterId,
           outline: outlineText,
           targetWords: input.targetWords || 4000,
           planDocumentId,
           status: "pending",
         });
       } catch (error) {
-        if (isMissingAsyncJobTableError(error)) {
+        if (isMissingAsyncJobSchemaError(error)) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message:
-              "异步扩写任务表不存在，请先执行数据库迁移（0002_workspace_plans_papers.sql）",
+              "异步扩写任务表结构不完整，请执行数据库迁移（0002_workspace_plans_papers.sql 和 0003_ai_expand_jobs_chapter_scope.sql）",
           });
         }
         throw error;
@@ -280,6 +302,7 @@ export const aiRouter = router({
     .input(
       z.object({
         novelId: z.number(),
+        chapterId: z.number().optional(),
         limit: z.number().min(1).max(50).optional(),
       })
     )
@@ -288,13 +311,27 @@ export const aiRouter = router({
       if (!novel || novel.userId !== ctx.user.id) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Novel not found" });
       }
+      await ensureNovelChapterOwner(input.novelId, input.chapterId);
 
-      const jobs = await db.getExpandJobsByWorkspace(
-        ctx.user.id,
-        "novel",
-        input.novelId,
-        input.limit || 10
-      );
+      let jobs;
+      try {
+        jobs = await db.getExpandJobsByWorkspace(
+          ctx.user.id,
+          "novel",
+          input.novelId,
+          input.limit || 10,
+          input.chapterId
+        );
+      } catch (error) {
+        if (isMissingAsyncJobSchemaError(error)) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message:
+              "异步扩写任务表结构不完整，请执行数据库迁移（0002_workspace_plans_papers.sql 和 0003_ai_expand_jobs_chapter_scope.sql）",
+          });
+        }
+        throw error;
+      }
 
       return jobs.map((job) => ({
         id: job.id,

@@ -91,7 +91,11 @@ export default function AIExpandPage() {
   );
 
   const expandJobsQuery = trpc.ai.listExpandJobs.useQuery(
-    { novelId, limit: 10 },
+    {
+      novelId,
+      chapterId: hasChapterId ? chapterId : undefined,
+      limit: 10,
+    },
     {
       enabled: Number.isFinite(novelId) && novelId > 0,
       refetchInterval(query) {
@@ -115,6 +119,7 @@ export default function AIExpandPage() {
     if (fallbackMode) {
       await expandContentSync.mutateAsync({
         novelId,
+        chapterId: hasChapterId ? chapterId : undefined,
         outline,
         targetWords,
         planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
@@ -126,6 +131,7 @@ export default function AIExpandPage() {
     try {
       const data = await expandContentAsync.mutateAsync({
         novelId,
+        chapterId: hasChapterId ? chapterId : undefined,
         outline,
         targetWords,
         planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
@@ -137,6 +143,7 @@ export default function AIExpandPage() {
       setFallbackMode(true);
       await expandContentSync.mutateAsync({
         novelId,
+        chapterId: hasChapterId ? chapterId : undefined,
         outline,
         targetWords,
         planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
