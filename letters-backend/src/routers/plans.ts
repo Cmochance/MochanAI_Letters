@@ -5,6 +5,18 @@ import * as db from "../db/queries.js";
 
 const workspaceTypeSchema = z.enum(["novel", "paper"]);
 
+function isMissingPlanChapterScopeError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message;
+  return (
+    msg.includes("ai_plan_documents") &&
+    msg.includes("chapter_id") &&
+    (msg.includes("does not exist") ||
+      msg.includes("column") ||
+      msg.includes("不存在"))
+  );
+}
+
 export const plansRouter = router({
   getLatest: protectedProcedure
     .input(
@@ -12,15 +24,29 @@ export const plansRouter = router({
         workspaceType: workspaceTypeSchema,
         workspaceId: z.number(),
         sectionNumber: z.number().min(1),
+        chapterId: z.number().optional(),
       })
     )
     .query(async ({ ctx, input }) => {
-      const result = await db.getLatestPlanByScope(
-        ctx.user.id,
-        input.workspaceType,
-        input.workspaceId,
-        input.sectionNumber
-      );
+      let result;
+      try {
+        result = await db.getLatestPlanByScope(
+          ctx.user.id,
+          input.workspaceType,
+          input.workspaceId,
+          input.sectionNumber,
+          input.chapterId
+        );
+      } catch (error) {
+        if (isMissingPlanChapterScopeError(error)) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message:
+              "规划表结构不完整，请执行数据库迁移（0004_ai_plan_documents_chapter_scope.sql）",
+          });
+        }
+        throw error;
+      }
 
       if (!result) {
         return null;
@@ -30,6 +56,7 @@ export const plansRouter = router({
         planDocumentId: result.document.id,
         workspaceType: result.document.workspaceType,
         workspaceId: result.document.workspaceId,
+        chapterId: result.document.chapterId,
         sectionNumber: result.document.sectionNumber,
         version: result.version.version,
         theme: result.version.theme,
@@ -89,6 +116,7 @@ export const plansRouter = router({
         planDocumentId: input.planDocumentId,
         workspaceType: document.workspaceType,
         workspaceId: document.workspaceId,
+        chapterId: document.chapterId,
         sectionNumber: document.sectionNumber,
         version: resolvedVersion.version,
         theme: resolvedVersion.theme,

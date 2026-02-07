@@ -20,8 +20,8 @@ export default function AIExpandPage() {
   const searchParams = useSearchParams();
   const novelId = Number(searchParams.get("novelId"));
   const chapterId = Number(searchParams.get("chapterId"));
-  const planDocumentId = Number(searchParams.get("planDocumentId"));
-  const version = Number(searchParams.get("version"));
+  const initialPlanDocumentId = Number(searchParams.get("planDocumentId"));
+  const initialVersion = Number(searchParams.get("version"));
   const initialOutline = searchParams.get("outline") || "";
 
   const [outline, setOutline] = useState(initialOutline);
@@ -32,19 +32,49 @@ export default function AIExpandPage() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [fallbackMode, setFallbackMode] = useState(false);
+  const [resolvedPlanDocumentId, setResolvedPlanDocumentId] = useState<number | null>(
+    Number.isFinite(initialPlanDocumentId) && initialPlanDocumentId > 0
+      ? initialPlanDocumentId
+      : null
+  );
+  const [resolvedVersion, setResolvedVersion] = useState<number | null>(
+    Number.isFinite(initialVersion) && initialVersion > 0 ? initialVersion : null
+  );
   const contentRef = useRef<HTMLDivElement | null>(null);
 
-  const hasPlanDocumentId = Number.isFinite(planDocumentId) && planDocumentId > 0;
-  const hasVersion = Number.isFinite(version) && version > 0;
+  const hasPlanDocumentId = Boolean(resolvedPlanDocumentId);
+  const hasVersion = Boolean(resolvedVersion);
   const hasChapterId = Number.isFinite(chapterId) && chapterId > 0;
+  const chapterQuery = trpc.chapters.get.useQuery(
+    { id: chapterId },
+    { enabled: hasChapterId }
+  );
 
   const planQuery = trpc.plans.getVersion.useQuery(
     {
-      planDocumentId,
-      version: hasVersion ? version : undefined,
+      planDocumentId: resolvedPlanDocumentId || -1,
+      version: hasVersion ? resolvedVersion || undefined : undefined,
     },
     {
-      enabled: hasPlanDocumentId && !initialOutline,
+      enabled: hasPlanDocumentId && !initialOutline && !outline,
+    }
+  );
+
+  const latestChapterPlanQuery = trpc.plans.getLatest.useQuery(
+    {
+      workspaceType: "novel",
+      workspaceId: novelId,
+      sectionNumber: chapterQuery.data?.chapterNumber || 1,
+      chapterId: hasChapterId ? chapterId : undefined,
+    },
+    {
+      enabled:
+        Number.isFinite(novelId) &&
+        novelId > 0 &&
+        hasChapterId &&
+        Boolean(chapterQuery.data) &&
+        !initialOutline &&
+        !hasPlanDocumentId,
     }
   );
 
@@ -52,7 +82,17 @@ export default function AIExpandPage() {
     if (!planQuery.data || outline) return;
     const text = `${planQuery.data.theme}\n\n${planQuery.data.framework}\n\n${planQuery.data.conflicts}\n\n${planQuery.data.interactions}`;
     setOutline(text);
+    setResolvedPlanDocumentId(planQuery.data.planDocumentId);
+    setResolvedVersion(planQuery.data.version);
   }, [planQuery.data, outline]);
+
+  useEffect(() => {
+    if (!latestChapterPlanQuery.data || outline) return;
+    const text = `${latestChapterPlanQuery.data.theme}\n\n${latestChapterPlanQuery.data.framework}\n\n${latestChapterPlanQuery.data.conflicts}\n\n${latestChapterPlanQuery.data.interactions}`;
+    setOutline(text);
+    setResolvedPlanDocumentId(latestChapterPlanQuery.data.planDocumentId);
+    setResolvedVersion(latestChapterPlanQuery.data.version);
+  }, [latestChapterPlanQuery.data, outline]);
 
   const expandContentAsync = trpc.ai.expandContentAsync.useMutation({
     onSuccess: (data) => {
@@ -122,8 +162,8 @@ export default function AIExpandPage() {
         chapterId: hasChapterId ? chapterId : undefined,
         outline,
         targetWords,
-        planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
-        version: hasVersion ? version : undefined,
+        planDocumentId: hasPlanDocumentId ? resolvedPlanDocumentId || undefined : undefined,
+        version: hasVersion ? resolvedVersion || undefined : undefined,
       });
       return;
     }
@@ -134,8 +174,8 @@ export default function AIExpandPage() {
         chapterId: hasChapterId ? chapterId : undefined,
         outline,
         targetWords,
-        planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
-        version: hasVersion ? version : undefined,
+        planDocumentId: hasPlanDocumentId ? resolvedPlanDocumentId || undefined : undefined,
+        version: hasVersion ? resolvedVersion || undefined : undefined,
       });
       setSelectedJobId(data.jobId);
     } catch (error) {
@@ -146,8 +186,8 @@ export default function AIExpandPage() {
         chapterId: hasChapterId ? chapterId : undefined,
         outline,
         targetWords,
-        planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
-        version: hasVersion ? version : undefined,
+        planDocumentId: hasPlanDocumentId ? resolvedPlanDocumentId || undefined : undefined,
+        version: hasVersion ? resolvedVersion || undefined : undefined,
       });
     }
   };
@@ -203,7 +243,7 @@ export default function AIExpandPage() {
     <div className="content-container">
       <div className="flex items-center gap-4 mb-8">
         <Link
-          href={`/novels/${novelId}`}
+          href={hasChapterId ? `/chapters/${chapterId}` : `/novels/${novelId}`}
           className="p-2 rounded-lg hover:bg-muted/10 transition-colors"
         >
           <ArrowLeft className="w-5 h-5 text-muted" />
@@ -238,6 +278,17 @@ export default function AIExpandPage() {
                 step={500}
               />
             </div>
+            <Link
+              href={
+                hasChapterId
+                  ? `/ai-outline?novelId=${novelId}&chapterId=${chapterId}`
+                  : `/ai-outline?novelId=${novelId}`
+              }
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Sparkles className="w-4 h-4" />
+              AI 规划
+            </Link>
             <button
               onClick={() => {
                 handleExpand().catch(console.error);
@@ -262,6 +313,14 @@ export default function AIExpandPage() {
 
       {planQuery.isLoading && (
         <div className="card mb-6 text-muted">正在读取已保存规划...</div>
+      )}
+      {latestChapterPlanQuery.isLoading && (
+        <div className="card mb-6 text-muted">正在读取本章节规划...</div>
+      )}
+      {hasChapterId && chapterQuery.data && !outline && (
+        <div className="card mb-6 bg-warning/10 border-warning/20 text-sm text-foreground">
+          当前章节还没有可用规划。可先点击上方 `AI 规划` 生成并保存，再回来扩写。
+        </div>
       )}
 
       {expandContentAsync.isError && (

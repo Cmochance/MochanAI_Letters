@@ -33,7 +33,24 @@ function isMissingAsyncJobSchemaError(error: unknown): boolean {
     (msg.includes("chapter_id") &&
       (msg.includes("does not exist") ||
         msg.includes("column") ||
+        msg.includes("不存在"))) ||
+    (msg.includes("ai_plan_documents") &&
+      msg.includes("chapter_id") &&
+      (msg.includes("does not exist") ||
+        msg.includes("column") ||
         msg.includes("不存在")))
+  );
+}
+
+function isMissingPlanChapterScopeError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message;
+  return (
+    msg.includes("ai_plan_documents") &&
+    msg.includes("chapter_id") &&
+    (msg.includes("does not exist") ||
+      msg.includes("column") ||
+      msg.includes("不存在"))
   );
 }
 
@@ -131,12 +148,32 @@ async function ensureNovelChapterOwner(novelId: number, chapterId?: number) {
   }
 }
 
+async function resolveChapterNumber(
+  novelId: number,
+  chapterNumber: number,
+  chapterId?: number
+) {
+  if (!chapterId) {
+    return chapterNumber;
+  }
+
+  const chapter = await db.getChapterById(chapterId);
+  if (!chapter || chapter.novelId !== novelId) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Chapter not found",
+    });
+  }
+  return chapter.chapterNumber;
+}
+
 export const aiRouter = router({
   generateOutline: protectedProcedure
     .input(
       z.object({
         novelId: z.number(),
         chapterNumber: z.number().min(1),
+        chapterId: z.number().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -144,12 +181,19 @@ export const aiRouter = router({
       if (!novel || novel.userId !== ctx.user.id) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Novel not found" });
       }
+      await ensureNovelChapterOwner(input.novelId, input.chapterId);
+
+      const resolvedChapterNumber = await resolveChapterNumber(
+        input.novelId,
+        input.chapterNumber,
+        input.chapterId
+      );
 
       const settings = await db.getUserSettings(ctx.user.id);
 
       const outline = await generateChapterOutline(
         input.novelId,
-        input.chapterNumber,
+        resolvedChapterNumber,
         settings?.apiKey || undefined,
         settings?.apiBaseUrl || undefined,
         settings?.modelName || undefined,
@@ -158,18 +202,33 @@ export const aiRouter = router({
         settings?.embeddingModel || undefined
       );
 
-      const saved = await db.createPlanVersion(
-        ctx.user.id,
-        "novel",
-        input.novelId,
-        input.chapterNumber,
-        outline
-      );
+      let saved;
+      try {
+        saved = await db.createPlanVersion(
+          ctx.user.id,
+          "novel",
+          input.novelId,
+          resolvedChapterNumber,
+          outline,
+          input.chapterId
+        );
+      } catch (error) {
+        if (isMissingPlanChapterScopeError(error)) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message:
+              "规划表结构不完整，请执行数据库迁移（0004_ai_plan_documents_chapter_scope.sql）",
+          });
+        }
+        throw error;
+      }
 
       return {
         ...outline,
         planDocumentId: saved.document.id,
         version: saved.version.version,
+        chapterNumber: resolvedChapterNumber,
+        chapterId: input.chapterId ?? saved.document.chapterId ?? null,
       };
     }),
 

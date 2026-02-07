@@ -139,6 +139,13 @@ export default function ChapterDetailPage() {
                 {isSaving ? "保存中..." : "保存"}
               </button>
               <Link
+                href={`/ai-outline?novelId=${chapter.novelId}&chapterId=${chapterId}`}
+                className="btn-secondary flex items-center gap-2 text-sm py-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                AI 规划
+              </Link>
+              <Link
                 href={`/ai-expand?novelId=${chapter.novelId}&chapterId=${chapterId}`}
                 className="btn-primary flex items-center gap-2 text-sm py-2"
               >

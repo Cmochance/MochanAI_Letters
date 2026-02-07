@@ -21,6 +21,8 @@ type OutlineState = (OutlinePayload & {
 export default function AIOutlinePage() {
   const searchParams = useSearchParams();
   const novelId = Number(searchParams.get("novelId"));
+  const chapterId = Number(searchParams.get("chapterId"));
+  const hasChapterId = Number.isFinite(chapterId) && chapterId > 0;
 
   const [chapterNumber, setChapterNumber] = useState(1);
   const [outline, setOutline] = useState<OutlineState>(null);
@@ -36,15 +38,30 @@ export default function AIOutlinePage() {
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
 
   const utils = trpc.useUtils();
+  const chapterQuery = trpc.chapters.get.useQuery(
+    { id: chapterId },
+    {
+      enabled: hasChapterId,
+    }
+  );
+
+  useEffect(() => {
+    if (!chapterQuery.data) return;
+    setChapterNumber(chapterQuery.data.chapterNumber);
+  }, [chapterQuery.data]);
 
   const latestPlanQuery = trpc.plans.getLatest.useQuery(
     {
       workspaceType: "novel",
       workspaceId: novelId,
       sectionNumber: chapterNumber,
+      chapterId: hasChapterId ? chapterId : undefined,
     },
     {
-      enabled: Number.isFinite(novelId) && novelId > 0,
+      enabled:
+        Number.isFinite(novelId) &&
+        novelId > 0 &&
+        (!hasChapterId || Boolean(chapterQuery.data)),
     }
   );
 
@@ -114,6 +131,7 @@ export default function AIOutlinePage() {
         workspaceType: "novel",
         workspaceId: novelId,
         sectionNumber: chapterNumber,
+        chapterId: hasChapterId ? chapterId : undefined,
       });
       utils.plans.listVersions.invalidate({
         planDocumentId: data.planDocumentId,
@@ -148,6 +166,7 @@ export default function AIOutlinePage() {
         workspaceType: "novel",
         workspaceId: novelId,
         sectionNumber: chapterNumber,
+        chapterId: hasChapterId ? chapterId : undefined,
       });
     },
   });
@@ -155,7 +174,11 @@ export default function AIOutlinePage() {
   const handleGenerate = () => {
     if (!novelId) return;
     setRestored(false);
-    generateOutline.mutate({ novelId, chapterNumber });
+    generateOutline.mutate({
+      novelId,
+      chapterNumber,
+      chapterId: hasChapterId ? chapterId : undefined,
+    });
   };
 
   const handleCopy = async (text: string, field: string) => {
@@ -248,11 +271,32 @@ export default function AIOutlinePage() {
     );
   }
 
+  if (hasChapterId && chapterQuery.isLoading) {
+    return (
+      <div className="content-container">
+        <div className="text-center py-20 text-muted">正在加载章节信息...</div>
+      </div>
+    );
+  }
+
+  if (hasChapterId && !chapterQuery.data) {
+    return (
+      <div className="content-container">
+        <div className="text-center py-20">
+          <p className="text-muted">章节不存在</p>
+          <Link href="/novels" className="btn-primary mt-4 inline-block">
+            返回小说列表
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="content-container">
       <div className="flex items-center gap-4 mb-8">
         <Link
-          href={`/novels/${novelId}`}
+          href={hasChapterId ? `/chapters/${chapterId}` : `/novels/${novelId}`}
           className="p-2 rounded-lg hover:bg-muted/10 transition-colors"
         >
           <ArrowLeft className="w-5 h-5 text-muted" />
@@ -274,6 +318,7 @@ export default function AIOutlinePage() {
               className="input"
               min={1}
               placeholder="请输入章节序号"
+              disabled={hasChapterId}
             />
           </div>
           <button
@@ -405,7 +450,11 @@ export default function AIOutlinePage() {
 
           <div className="flex gap-3 flex-wrap">
             <Link
-              href={`/ai-expand?novelId=${novelId}&planDocumentId=${outline.planDocumentId}&version=${outline.version}`}
+              href={
+                hasChapterId
+                  ? `/ai-expand?novelId=${novelId}&chapterId=${chapterId}&planDocumentId=${outline.planDocumentId}&version=${outline.version}`
+                  : `/ai-expand?novelId=${novelId}&planDocumentId=${outline.planDocumentId}&version=${outline.version}`
+              }
               className="btn-primary flex items-center gap-2"
             >
               <Sparkles className="w-4 h-4" />

@@ -480,6 +480,26 @@ export async function getPlanDocumentByScope(
   return result[0] || null;
 }
 
+export async function getPlanDocumentByChapter(
+  userId: number,
+  workspaceId: number,
+  chapterId: number
+) {
+  const result = await db
+    .select()
+    .from(aiPlanDocuments)
+    .where(
+      and(
+        eq(aiPlanDocuments.userId, userId),
+        eq(aiPlanDocuments.workspaceType, "novel"),
+        eq(aiPlanDocuments.workspaceId, workspaceId),
+        eq(aiPlanDocuments.chapterId, chapterId)
+      )
+    )
+    .limit(1);
+  return result[0] || null;
+}
+
 export async function getPlanDocumentById(userId: number, documentId: number) {
   const result = await db
     .select()
@@ -496,8 +516,20 @@ export async function getOrCreatePlanDocument(
   userId: number,
   workspace: WorkspaceTypeValue,
   workspaceId: number,
-  sectionNumber: number
+  sectionNumber: number,
+  chapterId?: number
 ) {
+  if (workspace === "novel" && chapterId) {
+    const existingByChapter = await getPlanDocumentByChapter(
+      userId,
+      workspaceId,
+      chapterId
+    );
+    if (existingByChapter) {
+      return existingByChapter;
+    }
+  }
+
   const existing = await getPlanDocumentByScope(
     userId,
     workspace,
@@ -506,6 +538,23 @@ export async function getOrCreatePlanDocument(
   );
 
   if (existing) {
+    if (
+      workspace === "novel" &&
+      chapterId &&
+      existing.chapterId !== chapterId
+    ) {
+      await db
+        .update(aiPlanDocuments)
+        .set({
+          chapterId,
+          updatedAt: new Date(),
+        })
+        .where(eq(aiPlanDocuments.id, existing.id));
+      return {
+        ...existing,
+        chapterId,
+      };
+    }
     return existing;
   }
   try {
@@ -515,6 +564,7 @@ export async function getOrCreatePlanDocument(
         userId,
         workspaceType: workspace,
         workspaceId,
+        chapterId,
         sectionNumber,
       })
       .returning();
@@ -527,6 +577,14 @@ export async function getOrCreatePlanDocument(
       workspaceId,
       sectionNumber
     );
+    if (!retry && workspace === "novel" && chapterId) {
+      const retryByChapter = await getPlanDocumentByChapter(
+        userId,
+        workspaceId,
+        chapterId
+      );
+      if (retryByChapter) return retryByChapter;
+    }
     if (retry) return retry;
     throw error;
   }
@@ -553,13 +611,15 @@ export async function createPlanVersion(
     framework: string;
     conflicts: string;
     interactions: string;
-  }
+  },
+  chapterId?: number
 ) {
   const document = await getOrCreatePlanDocument(
     userId,
     workspace,
     workspaceId,
-    sectionNumber
+    sectionNumber,
+    chapterId
   );
 
   const latest = await getLatestPlanVersion(document.id);
@@ -624,14 +684,22 @@ export async function getLatestPlanByScope(
   userId: number,
   workspace: WorkspaceTypeValue,
   workspaceId: number,
-  sectionNumber: number
+  sectionNumber: number,
+  chapterId?: number
 ) {
-  const document = await getPlanDocumentByScope(
-    userId,
-    workspace,
-    workspaceId,
-    sectionNumber
-  );
+  let document = null;
+  if (workspace === "novel" && chapterId) {
+    document = await getPlanDocumentByChapter(userId, workspaceId, chapterId);
+  }
+
+  if (!document) {
+    document = await getPlanDocumentByScope(
+      userId,
+      workspace,
+      workspaceId,
+      sectionNumber
+    );
+  }
 
   if (!document) return null;
 

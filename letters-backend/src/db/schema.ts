@@ -226,6 +226,9 @@ export const aiPlanDocuments = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     workspaceType: workspaceType("workspace_type").notNull(),
     workspaceId: integer("workspace_id").notNull(),
+    chapterId: integer("chapter_id").references(() => chapters.id, {
+      onDelete: "set null",
+    }),
     sectionNumber: integer("section_number").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
