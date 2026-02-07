@@ -18,6 +18,7 @@ import {
 export default function AIExpandPage() {
   const searchParams = useSearchParams();
   const novelId = Number(searchParams.get("novelId"));
+  const chapterId = Number(searchParams.get("chapterId"));
   const planDocumentId = Number(searchParams.get("planDocumentId"));
   const version = Number(searchParams.get("version"));
   const initialOutline = searchParams.get("outline") || "";
@@ -28,10 +29,12 @@ export default function AIExpandPage() {
   const [copied, setCopied] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [fallbackMode, setFallbackMode] = useState(false);
 
   const hasPlanDocumentId = Number.isFinite(planDocumentId) && planDocumentId > 0;
   const hasVersion = Number.isFinite(version) && version > 0;
+  const hasChapterId = Number.isFinite(chapterId) && chapterId > 0;
 
   const planQuery = trpc.plans.getVersion.useQuery(
     {
@@ -59,6 +62,13 @@ export default function AIExpandPage() {
     onSuccess: (data) => {
       setExpandedContent(data.content);
       setJobId(null);
+    },
+  });
+
+  const saveChapter = trpc.chapters.update.useMutation({
+    onSuccess: () => {
+      setSaveNotice("已保存为当前章节内容");
+      setTimeout(() => setSaveNotice(null), 2000);
     },
   });
 
@@ -137,6 +147,15 @@ export default function AIExpandPage() {
     await navigator.clipboard.writeText(expandedContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSaveToChapter = () => {
+    if (!hasChapterId || !expandedContent.trim()) return;
+    if (!confirm("确定要用扩写结果覆盖当前章节内容吗？")) return;
+    saveChapter.mutate({
+      id: chapterId,
+      content: expandedContent,
+    });
   };
 
   const statusLabel = useMemo(() => {
@@ -271,23 +290,38 @@ export default function AIExpandPage() {
               <span className="font-medium">扩写结果</span>
               <span className="tag">{countWords(expandedContent).toLocaleString()} 字</span>
             </div>
-            <button
-              onClick={handleCopy}
-              className="btn-secondary flex items-center gap-2 text-sm py-2"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-4 h-4 text-success" />
-                  已复制
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" />
-                  复制内容
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopy}
+                className="btn-secondary flex items-center gap-2 text-sm py-2"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-4 h-4 text-success" />
+                    已复制
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    复制内容
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleSaveToChapter}
+                disabled={!hasChapterId || saveChapter.isPending}
+                className="btn-primary flex items-center gap-2 text-sm py-2 disabled:opacity-50"
+              >
+                {saveChapter.isPending ? "保存中..." : "保存为当前章节"}
+              </button>
+            </div>
           </div>
+
+          {saveNotice && (
+            <div className="mb-4 p-3 rounded-lg bg-success/10 border border-success/20 text-success text-sm">
+              {saveNotice}
+            </div>
+          )}
 
           <div className="prose prose-lg max-w-none">
             <div className="whitespace-pre-wrap leading-relaxed text-foreground font-serif">
@@ -306,6 +340,11 @@ export default function AIExpandPage() {
               {fallbackMode ? "重新同步生成" : "重新提交任务"}
             </button>
           </div>
+          {!hasChapterId && (
+            <div className="mt-3 text-xs text-muted">
+              需从章节详情页进入，才能保存为当前章节。
+            </div>
+          )}
         </div>
       )}
 
