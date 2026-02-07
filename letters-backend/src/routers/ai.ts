@@ -276,6 +276,36 @@ export const aiRouter = router({
       };
     }),
 
+  listExpandJobs: protectedProcedure
+    .input(
+      z.object({
+        novelId: z.number(),
+        limit: z.number().min(1).max(50).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const novel = await db.getNovelById(input.novelId);
+      if (!novel || novel.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Novel not found" });
+      }
+
+      const jobs = await db.getExpandJobsByWorkspace(
+        ctx.user.id,
+        "novel",
+        input.novelId,
+        input.limit || 10
+      );
+
+      return jobs.map((job) => ({
+        id: job.id,
+        status: job.status,
+        createdAt: job.createdAt,
+        startedAt: job.startedAt,
+        finishedAt: job.finishedAt,
+        errorMessage: job.errorMessage,
+      }));
+    }),
+
   vectorizeChapter: protectedProcedure
     .input(
       z.object({

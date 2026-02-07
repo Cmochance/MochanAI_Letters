@@ -268,4 +268,31 @@ export const paperAiRouter = router({
         finishedAt: job.finishedAt,
       };
     }),
+
+  listExpandJobs: protectedProcedure
+    .input(
+      z.object({
+        paperId: z.number(),
+        limit: z.number().min(1).max(50).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await ensurePaperOwner(ctx.user.id, input.paperId);
+
+      const jobs = await db.getExpandJobsByWorkspace(
+        ctx.user.id,
+        "paper",
+        input.paperId,
+        input.limit || 10
+      );
+
+      return jobs.map((job) => ({
+        id: job.id,
+        status: job.status,
+        createdAt: job.createdAt,
+        startedAt: job.startedAt,
+        finishedAt: job.finishedAt,
+        errorMessage: job.errorMessage,
+      }));
+    }),
 });

@@ -5,7 +5,15 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { countWords } from "@/lib/utils";
-import { ArrowLeft, Sparkles, Copy, Check, FileText, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  Sparkles,
+  Copy,
+  Check,
+  FileText,
+  RefreshCw,
+  History,
+} from "lucide-react";
 
 export default function AIExpandPage() {
   const searchParams = useSearchParams();
@@ -19,6 +27,7 @@ export default function AIExpandPage() {
   const [expandedContent, setExpandedContent] = useState("");
   const [copied, setCopied] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [fallbackMode, setFallbackMode] = useState(false);
 
   const hasPlanDocumentId = Number.isFinite(planDocumentId) && planDocumentId > 0;
@@ -53,16 +62,31 @@ export default function AIExpandPage() {
     },
   });
 
+  const activeJobId = selectedJobId ?? jobId;
+
   const expandJobQuery = trpc.ai.getExpandJob.useQuery(
-    { jobId: jobId || -1 },
+    { jobId: activeJobId || -1 },
     {
-      enabled: Boolean(jobId),
+      enabled: Boolean(activeJobId),
       refetchInterval(query) {
         const status = query.state.data?.status;
         if (status === "pending" || status === "running") {
           return 2000;
         }
         return false;
+      },
+    }
+  );
+
+  const expandJobsQuery = trpc.ai.listExpandJobs.useQuery(
+    { novelId, limit: 10 },
+    {
+      enabled: Number.isFinite(novelId) && novelId > 0,
+      refetchInterval(query) {
+        const hasRunning = (query.state.data || []).some(
+          (job) => job.status === "pending" || job.status === "running"
+        );
+        return hasRunning ? 5000 : false;
       },
     }
   );
@@ -88,13 +112,14 @@ export default function AIExpandPage() {
     }
 
     try {
-      await expandContentAsync.mutateAsync({
+      const data = await expandContentAsync.mutateAsync({
         novelId,
         outline,
         targetWords,
         planDocumentId: hasPlanDocumentId ? planDocumentId : undefined,
         version: hasVersion ? version : undefined,
       });
+      setSelectedJobId(data.jobId);
     } catch (error) {
       console.error("Async expand failed, fallback to sync expand", error);
       setFallbackMode(true);
@@ -283,6 +308,52 @@ export default function AIExpandPage() {
           </div>
         </div>
       )}
+
+      <div className="card mt-8">
+        <div className="flex items-center gap-2 mb-4">
+          <History className="w-4 h-4 text-muted" />
+          <span className="text-sm text-muted">扩写任务记录</span>
+        </div>
+        {expandJobsQuery.isLoading && (
+          <div className="text-muted text-sm">加载任务中...</div>
+        )}
+        {expandJobsQuery.data && expandJobsQuery.data.length === 0 && (
+          <div className="text-muted text-sm">暂无任务记录</div>
+        )}
+        {expandJobsQuery.data && expandJobsQuery.data.length > 0 && (
+          <div className="space-y-2">
+            {expandJobsQuery.data.map((job) => (
+              <button
+                key={job.id}
+                onClick={() => setSelectedJobId(job.id)}
+                className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                  activeJobId === job.id
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/40"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-foreground">任务 #{job.id}</span>
+                  <span className="text-xs text-muted">
+                    {job.status === "pending"
+                      ? "排队中"
+                      : job.status === "running"
+                        ? "生成中"
+                        : job.status === "succeeded"
+                          ? "已完成"
+                          : job.status === "failed"
+                            ? "失败"
+                            : "已取消"}
+                  </span>
+                </div>
+                <div className="text-xs text-muted mt-1">
+                  创建时间：{new Date(job.createdAt).toLocaleString()}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

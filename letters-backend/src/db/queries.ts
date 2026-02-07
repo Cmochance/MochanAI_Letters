@@ -695,6 +695,26 @@ export async function getExpandJobById(userId: number, jobId: number) {
   return result[0] || null;
 }
 
+export async function getExpandJobsByWorkspace(
+  userId: number,
+  workspaceTypeValue: WorkspaceTypeValue,
+  workspaceId: number,
+  limit: number = 10
+) {
+  return db
+    .select()
+    .from(aiExpandJobs)
+    .where(
+      and(
+        eq(aiExpandJobs.userId, userId),
+        eq(aiExpandJobs.workspaceType, workspaceTypeValue),
+        eq(aiExpandJobs.workspaceId, workspaceId)
+      )
+    )
+    .orderBy(desc(aiExpandJobs.createdAt))
+    .limit(limit);
+}
+
 export async function updateExpandJob(
   jobId: number,
   userId: number,
