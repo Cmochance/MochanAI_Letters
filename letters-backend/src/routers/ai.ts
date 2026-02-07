@@ -5,6 +5,7 @@ import * as db from "../db/queries.js";
 import {
   generateChapterOutline,
   expandChapterContent,
+  generateChapterPoeticTitle,
   getOutlineFromStoredPlan,
   outlineToText,
 } from "../services/ai.js";
@@ -267,6 +268,40 @@ export const aiRouter = router({
       );
 
       return { content };
+    }),
+
+  generateChapterTitle: protectedProcedure
+    .input(
+      z.object({
+        novelId: z.number(),
+        chapterId: z.number(),
+        content: z.string().min(20),
+        outline: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const novel = await db.getNovelById(input.novelId);
+      if (!novel || novel.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Novel not found" });
+      }
+      await ensureNovelChapterOwner(input.novelId, input.chapterId);
+
+      const chapter = await db.getChapterById(input.chapterId);
+      if (!chapter) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Chapter not found" });
+      }
+
+      const settings = await db.getUserSettings(ctx.user.id);
+      const title = await generateChapterPoeticTitle(
+        chapter.chapterNumber,
+        input.content,
+        input.outline,
+        settings?.apiKey || undefined,
+        settings?.apiBaseUrl || undefined,
+        settings?.modelName || undefined
+      );
+
+      return { title };
     }),
 
   expandContentAsync: protectedProcedure

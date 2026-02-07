@@ -31,6 +31,7 @@ export default function AIExpandPage() {
   const [jobId, setJobId] = useState<number | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [fallbackMode, setFallbackMode] = useState(false);
   const [resolvedPlanDocumentId, setResolvedPlanDocumentId] = useState<number | null>(
     Number.isFinite(initialPlanDocumentId) && initialPlanDocumentId > 0
@@ -109,10 +110,10 @@ export default function AIExpandPage() {
 
   const saveChapter = trpc.chapters.update.useMutation({
     onSuccess: () => {
-      setSaveNotice("已保存为当前章节内容");
-      setTimeout(() => setSaveNotice(null), 2000);
+      return;
     },
   });
+  const generateChapterTitle = trpc.ai.generateChapterTitle.useMutation();
 
   const activeJobId = selectedJobId ?? jobId;
 
@@ -206,13 +207,30 @@ export default function AIExpandPage() {
     });
   };
 
-  const handleSaveToChapter = () => {
+  const handleSaveToChapter = async () => {
     if (!hasChapterId || !expandedContent.trim()) return;
     if (!confirm("确定要用扩写结果覆盖当前章节内容吗？")) return;
-    saveChapter.mutate({
-      id: chapterId,
-      content: expandedContent,
-    });
+    setSaveError(null);
+    try {
+      const titleResult = await generateChapterTitle.mutateAsync({
+        novelId,
+        chapterId,
+        content: expandedContent,
+        outline: outline.trim() ? outline : undefined,
+      });
+
+      await saveChapter.mutateAsync({
+        id: chapterId,
+        title: titleResult.title,
+        content: expandedContent,
+      });
+
+      setSaveNotice(`已保存章节，自动命名为：${titleResult.title}`);
+      setTimeout(() => setSaveNotice(null), 2500);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "保存失败，请重试";
+      setSaveError(message);
+    }
   };
 
   const statusLabel = useMemo(() => {
@@ -391,11 +409,21 @@ export default function AIExpandPage() {
                 )}
               </button>
               <button
-                onClick={handleSaveToChapter}
-                disabled={!hasChapterId || saveChapter.isPending}
+                onClick={() => {
+                  handleSaveToChapter().catch(console.error);
+                }}
+                disabled={
+                  !hasChapterId ||
+                  saveChapter.isPending ||
+                  generateChapterTitle.isPending
+                }
                 className="btn-primary flex items-center gap-2 text-sm py-2 disabled:opacity-50"
               >
-                {saveChapter.isPending ? "保存中..." : "保存为当前章节"}
+                {generateChapterTitle.isPending
+                  ? "命名中..."
+                  : saveChapter.isPending
+                    ? "保存中..."
+                    : "保存为当前章节"}
               </button>
             </div>
           </div>
@@ -403,6 +431,11 @@ export default function AIExpandPage() {
           {saveNotice && (
             <div className="mb-4 p-3 rounded-lg bg-success/10 border border-success/20 text-success text-sm">
               {saveNotice}
+            </div>
+          )}
+          {saveError && (
+            <div className="mb-4 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm">
+              {saveError}
             </div>
           )}
 

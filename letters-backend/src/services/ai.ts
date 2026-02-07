@@ -92,6 +92,95 @@ export async function expandChapterContent(
   return content;
 }
 
+function normalizePoeticTitle(raw: string): string | null {
+  const firstLine = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+
+  if (!firstLine) return null;
+
+  let text = firstLine
+    .replace(/^["'“”《》【】\[\]]+|["'“”《》【】\[\]]+$/g, "")
+    .replace(/^(标题|章节名|章名)\s*[:：]\s*/u, "")
+    .replace(/\s+/g, "")
+    .replace(/[。！？!?.；;：:]+$/u, "");
+
+  if (!text) return null;
+
+  const parts = text.split(/[，,。；;、]/u).filter(Boolean);
+  let left = "";
+  let right = "";
+
+  if (parts.length >= 2) {
+    [left, right] = parts;
+  } else if (text.length === 14) {
+    left = text.slice(0, 7);
+    right = text.slice(7);
+  } else {
+    return null;
+  }
+
+  const han7 = /^[\u4e00-\u9fff]{7}$/u;
+  if (!han7.test(left) || !han7.test(right)) {
+    return null;
+  }
+
+  return `${left}，${right}`;
+}
+
+function fallbackPoeticTitle(chapterNumber: number): string {
+  const presets = [
+    "云起苍岚映古城，风回幽壑动寒星",
+    "月照寒溪鸣古木，霜侵远岫锁孤灯",
+    "雪压青松沉夜色，风摇古渡起潮声",
+    "雨过长街浮旧梦，灯临短巷照新痕",
+    "雾隐孤峰藏古道，潮生远岸唤归舟",
+    "星坠寒江惊夜鹭，风过古渡动秋声",
+  ];
+  return presets[Math.abs(chapterNumber) % presets.length];
+}
+
+function buildChapterTitlePrompt(
+  chapterNumber: number,
+  content: string,
+  outline?: string
+): string {
+  return `你是一位擅长古典文学题名的编辑。请为第 ${chapterNumber} 章拟一个章节名。
+
+要求：
+1. 必须是“七言对句”格式：前7字 + 中文逗号 + 后7字。
+2. 前后语义呼应、意象对称，风格接近古诗。
+3. 只能输出标题本身，不要解释，不要引号，不要额外符号。
+4. 不要出现数字、英文、书名号。
+
+${outline ? `【章节大纲】\n${outline.substring(0, 800)}\n` : ""}
+【章节正文片段】
+${content.substring(0, 1800)}
+`;
+}
+
+export async function generateChapterPoeticTitle(
+  chapterNumber: number,
+  content: string,
+  outline?: string,
+  userApiKey?: string,
+  userBaseUrl?: string,
+  userModel?: string
+): Promise<string> {
+  const prompt = buildChapterTitlePrompt(chapterNumber, content, outline);
+  const response = await callAI(prompt, userApiKey, userBaseUrl, userModel);
+  const normalized = normalizePoeticTitle(response);
+  if (normalized) return normalized;
+
+  const repairPrompt = `请将下面的标题改写为“前7字，后7字”的七言对句，只输出改写后的标题：\n${response}`;
+  const repaired = await callAI(repairPrompt, userApiKey, userBaseUrl, userModel);
+  const normalizedRepaired = normalizePoeticTitle(repaired);
+  if (normalizedRepaired) return normalizedRepaired;
+
+  return fallbackPoeticTitle(chapterNumber);
+}
+
 /**
  * Generate paper section outline (academic)
  */
