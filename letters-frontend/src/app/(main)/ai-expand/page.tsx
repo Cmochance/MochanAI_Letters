@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
@@ -13,6 +13,7 @@ import {
   FileText,
   RefreshCw,
   History,
+  ChevronDown,
 } from "lucide-react";
 
 export default function AIExpandPage() {
@@ -31,6 +32,7 @@ export default function AIExpandPage() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [fallbackMode, setFallbackMode] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   const hasPlanDocumentId = Number.isFinite(planDocumentId) && planDocumentId > 0;
   const hasVersion = Number.isFinite(version) && version > 0;
@@ -147,6 +149,14 @@ export default function AIExpandPage() {
     await navigator.clipboard.writeText(expandedContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleScrollDown = () => {
+    if (!contentRef.current) return;
+    contentRef.current.scrollTo({
+      top: contentRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   };
 
   const handleSaveToChapter = () => {
@@ -292,6 +302,13 @@ export default function AIExpandPage() {
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={handleScrollDown}
+                className="btn-secondary flex items-center gap-2 text-sm py-2"
+              >
+                <ChevronDown className="w-4 h-4" />
+                下滚
+              </button>
+              <button
                 onClick={handleCopy}
                 className="btn-secondary flex items-center gap-2 text-sm py-2"
               >
@@ -323,7 +340,10 @@ export default function AIExpandPage() {
             </div>
           )}
 
-          <div className="prose prose-lg max-w-none">
+          <div
+            ref={contentRef}
+            className="prose prose-lg max-w-none max-h-[360px] overflow-y-auto rounded-lg border border-border bg-surface/40 p-4"
+          >
             <div className="whitespace-pre-wrap leading-relaxed text-foreground font-serif">
               {expandedContent}
             </div>
