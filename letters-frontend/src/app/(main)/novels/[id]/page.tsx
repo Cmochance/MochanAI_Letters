@@ -22,6 +22,7 @@ export default function NovelDetailPage() {
 
   const [isCreatingChapter, setIsCreatingChapter] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState("");
+  const [newChapterNumber, setNewChapterNumber] = useState(1);
 
   const utils = trpc.useUtils();
   const { data: novels } = trpc.novels.list.useQuery();
@@ -35,6 +36,7 @@ export default function NovelDetailPage() {
       utils.chapters.list.invalidate({ novelId });
       setIsCreatingChapter(false);
       setNewChapterTitle("");
+      setNewChapterNumber((chapters?.length || 0) + 1);
       router.push(`/chapters/${data.id}`);
     },
   });
@@ -51,9 +53,15 @@ export default function NovelDetailPage() {
     },
   });
 
+  const openCreateChapterModal = () => {
+    setNewChapterNumber((chapters?.length || 0) + 1);
+    setNewChapterTitle("");
+    setIsCreatingChapter(true);
+  };
+
   const handleCreateChapter = () => {
     if (!newChapterTitle.trim()) return;
-    const chapterNumber = (chapters?.length || 0) + 1;
+    const chapterNumber = Math.max(1, Math.floor(newChapterNumber || 1));
     createChapter.mutate({
       novelId,
       chapterNumber,
@@ -88,7 +96,7 @@ export default function NovelDetailPage() {
       {/* Actions */}
       <div className="flex flex-wrap gap-3 mb-8">
         <button
-          onClick={() => setIsCreatingChapter(true)}
+          onClick={openCreateChapterModal}
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
@@ -139,6 +147,23 @@ export default function NovelDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2">
+                  章节序号（绑定新章节ID）
+                </label>
+                <input
+                  type="number"
+                  value={newChapterNumber}
+                  onChange={(e) =>
+                    setNewChapterNumber(Number(e.target.value || 1))
+                  }
+                  className="input"
+                  min={1}
+                />
+                <p className="text-xs text-muted mt-2">
+                  若该序号已存在，系统会自动将后续章节顺延一位。
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
                   章节标题
                 </label>
                 <input
@@ -146,7 +171,7 @@ export default function NovelDetailPage() {
                   value={newChapterTitle}
                   onChange={(e) => setNewChapterTitle(e.target.value)}
                   className="input"
-                  placeholder={`第 ${(chapters?.length || 0) + 1} 章`}
+                  placeholder={`第 ${newChapterNumber} 章`}
                   autoFocus
                 />
               </div>
@@ -159,7 +184,12 @@ export default function NovelDetailPage() {
                 </button>
                 <button
                   onClick={handleCreateChapter}
-                  disabled={!newChapterTitle.trim() || createChapter.isPending}
+                  disabled={
+                    !newChapterTitle.trim() ||
+                    !Number.isFinite(newChapterNumber) ||
+                    newChapterNumber < 1 ||
+                    createChapter.isPending
+                  }
                   className="btn-primary disabled:opacity-50"
                 >
                   {createChapter.isPending ? "创建中..." : "创建"}
@@ -186,7 +216,7 @@ export default function NovelDetailPage() {
           </h3>
           <p className="text-muted mb-6">开始创作您的第一章吧</p>
           <button
-            onClick={() => setIsCreatingChapter(true)}
+            onClick={openCreateChapterModal}
             className="btn-primary inline-flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />

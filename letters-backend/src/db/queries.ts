@@ -157,6 +157,47 @@ export async function createChapter(data: Omit<InsertChapter, "id">) {
   return result[0].id;
 }
 
+export async function createChapterAtPosition(data: Omit<InsertChapter, "id">) {
+  const countResult = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(chapters)
+    .where(eq(chapters.novelId, data.novelId));
+
+  const chapterCount = Number(countResult[0]?.count) || 0;
+  const normalizedChapterNumber = Math.max(
+    1,
+    Math.min(data.chapterNumber, chapterCount + 1)
+  );
+
+  await db
+    .update(chapters)
+    .set({
+      chapterNumber: sql`${chapters.chapterNumber} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(chapters.novelId, data.novelId),
+        sql`${chapters.chapterNumber} >= ${normalizedChapterNumber}`
+      )
+    );
+
+  const result = await db
+    .insert(chapters)
+    .values({
+      ...data,
+      chapterNumber: normalizedChapterNumber,
+    })
+    .returning({ id: chapters.id });
+
+  await updateNovelWordCount(data.novelId);
+
+  return {
+    id: result[0].id,
+    chapterNumber: normalizedChapterNumber,
+  };
+}
+
 export async function updateChapter(
   chapterId: number,
   data: Partial<Omit<InsertChapter, "id" | "novelId">>

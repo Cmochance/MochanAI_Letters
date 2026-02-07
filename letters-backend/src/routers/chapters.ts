@@ -28,17 +28,20 @@ export const chaptersRouter = router({
     )
     .mutation(async ({ input }) => {
       const wordCount = countWords(input.content);
-      const chapterId = await db.createChapter({
+      const created = await db.createChapterAtPosition({
         ...input,
         wordCount,
       });
 
       // Vectorize chapter in background
-      vectorizeChapter(chapterId).catch((err) => {
+      vectorizeChapter(created.id).catch((err) => {
         console.error("Failed to vectorize chapter:", err);
       });
 
-      return { id: chapterId };
+      return {
+        id: created.id,
+        chapterNumber: created.chapterNumber,
+      };
     }),
 
   update: protectedProcedure
