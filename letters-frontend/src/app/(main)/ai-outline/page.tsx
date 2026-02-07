@@ -4,16 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Sparkles, Copy, Check, History } from "lucide-react";
+import { ArrowLeft, Sparkles, Copy, Check, History, Edit3, Save, X } from "lucide-react";
 
-type OutlineState = {
+type OutlinePayload = {
   theme: string;
   framework: string;
   conflicts: string;
   interactions: string;
+};
+
+type OutlineState = (OutlinePayload & {
   planDocumentId: number;
   version: number;
-} | null;
+}) | null;
 
 export default function AIOutlinePage() {
   const searchParams = useSearchParams();
@@ -21,6 +24,13 @@ export default function AIOutlinePage() {
 
   const [chapterNumber, setChapterNumber] = useState(1);
   const [outline, setOutline] = useState<OutlineState>(null);
+  const [draft, setDraft] = useState<OutlinePayload>({
+    theme: "",
+    framework: "",
+    conflicts: "",
+    interactions: "",
+  });
+  const [isEditing, setIsEditing] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
@@ -52,35 +62,54 @@ export default function AIOutlinePage() {
   useEffect(() => {
     if (!latestPlanQuery.data) {
       setOutline(null);
+      setDraft({ theme: "", framework: "", conflicts: "", interactions: "" });
       setRestored(false);
       setSelectedVersion(null);
+      setIsEditing(false);
       return;
     }
 
-    setOutline({
+    const nextOutline = {
       theme: latestPlanQuery.data.theme,
       framework: latestPlanQuery.data.framework,
       conflicts: latestPlanQuery.data.conflicts,
       interactions: latestPlanQuery.data.interactions,
       planDocumentId: latestPlanQuery.data.planDocumentId,
       version: latestPlanQuery.data.version,
+    };
+
+    setOutline(nextOutline);
+    setDraft({
+      theme: nextOutline.theme,
+      framework: nextOutline.framework,
+      conflicts: nextOutline.conflicts,
+      interactions: nextOutline.interactions,
     });
     setSelectedVersion(latestPlanQuery.data.version);
     setRestored(true);
+    setIsEditing(false);
   }, [latestPlanQuery.data]);
 
   const generateOutline = trpc.ai.generateOutline.useMutation({
     onSuccess: (data) => {
-      setOutline({
+      const nextOutline = {
         theme: data.theme,
         framework: data.framework,
         conflicts: data.conflicts,
         interactions: data.interactions,
         planDocumentId: data.planDocumentId,
         version: data.version,
+      };
+      setOutline(nextOutline);
+      setDraft({
+        theme: nextOutline.theme,
+        framework: nextOutline.framework,
+        conflicts: nextOutline.conflicts,
+        interactions: nextOutline.interactions,
       });
       setSelectedVersion(data.version);
       setRestored(false);
+      setIsEditing(false);
       utils.plans.getLatest.invalidate({
         workspaceType: "novel",
         workspaceId: novelId,
@@ -88,6 +117,37 @@ export default function AIOutlinePage() {
       });
       utils.plans.listVersions.invalidate({
         planDocumentId: data.planDocumentId,
+      });
+    },
+  });
+
+  const saveVersion = trpc.plans.saveVersion.useMutation({
+    onSuccess: (data) => {
+      const nextOutline = {
+        theme: data.theme,
+        framework: data.framework,
+        conflicts: data.conflicts,
+        interactions: data.interactions,
+        planDocumentId: data.planDocumentId,
+        version: data.version,
+      };
+      setOutline(nextOutline);
+      setDraft({
+        theme: nextOutline.theme,
+        framework: nextOutline.framework,
+        conflicts: nextOutline.conflicts,
+        interactions: nextOutline.interactions,
+      });
+      setSelectedVersion(data.version);
+      setRestored(false);
+      setIsEditing(false);
+      utils.plans.listVersions.invalidate({
+        planDocumentId: data.planDocumentId,
+      });
+      utils.plans.getLatest.invalidate({
+        workspaceType: "novel",
+        workspaceId: novelId,
+        sectionNumber: chapterNumber,
       });
     },
   });
@@ -122,14 +182,58 @@ export default function AIOutlinePage() {
       planDocumentId,
       version: plan.version,
     });
+    setDraft({
+      theme: plan.theme,
+      framework: plan.framework,
+      conflicts: plan.conflicts,
+      interactions: plan.interactions,
+    });
     setSelectedVersion(version);
     setRestored(true);
+    setIsEditing(false);
   };
 
   const outlineText = useMemo(() => {
     if (!outline) return "";
     return `${outline.theme}\n\n${outline.framework}\n\n${outline.conflicts}\n\n${outline.interactions}`;
   }, [outline]);
+
+  const handleDraftChange = (key: keyof OutlinePayload, value: string) => {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleStartEdit = () => {
+    if (!outline) return;
+    setDraft({
+      theme: outline.theme,
+      framework: outline.framework,
+      conflicts: outline.conflicts,
+      interactions: outline.interactions,
+    });
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    if (!outline) return;
+    setDraft({
+      theme: outline.theme,
+      framework: outline.framework,
+      conflicts: outline.conflicts,
+      interactions: outline.interactions,
+    });
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = () => {
+    if (!outline) return;
+    saveVersion.mutate({
+      planDocumentId: outline.planDocumentId,
+      theme: draft.theme,
+      framework: draft.framework,
+      conflicts: draft.conflicts,
+      interactions: draft.interactions,
+    });
+  };
 
   if (!novelId) {
     return (
@@ -195,69 +299,111 @@ export default function AIOutlinePage() {
         </div>
       )}
 
+      {saveVersion.isError && (
+        <div className="card bg-error/10 border-error/20 mb-6">
+          <p className="text-error">保存失败：{saveVersion.error.message}</p>
+        </div>
+      )}
+
       {outline && (
         <div className="space-y-4">
           <div className="card">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-2 text-sm text-muted">
                 <History className="w-4 h-4" />
                 当前版本：v{outline.version}
               </div>
-              {versionsQuery.data && versionsQuery.data.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted">历史版本</span>
-                  <select
-                    value={selectedVersion || outline.version}
-                    onChange={(event) => {
-                      const version = Number(event.target.value);
-                      if (Number.isFinite(version)) {
-                        handleLoadVersion(version).catch(console.error);
-                      }
-                    }}
-                    className="input py-2 min-w-[140px]"
+              <div className="flex items-center gap-2 flex-wrap">
+                {versionsQuery.data && versionsQuery.data.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted">历史版本</span>
+                    <select
+                      value={selectedVersion || outline.version}
+                      onChange={(event) => {
+                        const version = Number(event.target.value);
+                        if (Number.isFinite(version)) {
+                          handleLoadVersion(version).catch(console.error);
+                        }
+                      }}
+                      className="input py-2 min-w-[140px]"
+                    >
+                      {versionsQuery.data.map((version) => (
+                        <option key={version.version} value={version.version}>
+                          v{version.version}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {!isEditing && (
+                  <button
+                    onClick={handleStartEdit}
+                    className="btn-secondary flex items-center gap-2"
                   >
-                    {versionsQuery.data.map((version) => (
-                      <option key={version.version} value={version.version}>
-                        v{version.version}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+                    <Edit3 className="w-4 h-4" />
+                    编辑规划
+                  </button>
+                )}
+                {isEditing && (
+                  <>
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={saveVersion.isPending}
+                      className="btn-primary flex items-center gap-2"
+                    >
+                      <Save className="w-4 h-4" />
+                      {saveVersion.isPending ? "保存中..." : "保存为新版本"}
+                    </button>
+                    <button onClick={handleCancelEdit} className="btn-secondary flex items-center gap-2">
+                      <X className="w-4 h-4" />
+                      取消编辑
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          {[
-            { key: "theme", label: "章节主题", content: outline.theme },
-            { key: "framework", label: "情节框架", content: outline.framework },
-            { key: "conflicts", label: "关键冲突", content: outline.conflicts },
-            {
-              key: "interactions",
-              label: "人物互动",
-              content: outline.interactions,
-            },
-          ].map((item) => (
-            <div key={item.key} className="card">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-serif font-semibold text-foreground">{item.label}</h3>
-                <button
-                  onClick={() => handleCopy(item.content, item.key)}
-                  className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-muted/10 transition-colors"
-                >
-                  {copied === item.key ? (
-                    <Check className="w-4 h-4 text-success" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </button>
+          {([
+            { key: "theme", label: "章节主题" },
+            { key: "framework", label: "情节框架" },
+            { key: "conflicts", label: "关键冲突" },
+            { key: "interactions", label: "人物互动" },
+          ] as Array<{ key: keyof OutlinePayload; label: string }>).map((item) => {
+            const content = isEditing ? draft[item.key] : outline[item.key];
+            return (
+              <div key={item.key} className="card">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-serif font-semibold text-foreground">{item.label}</h3>
+                  <button
+                    onClick={() => handleCopy(content, item.key)}
+                    className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-muted/10 transition-colors"
+                  >
+                    {copied === item.key ? (
+                      <Check className="w-4 h-4 text-success" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                {isEditing ? (
+                  <textarea
+                    value={content}
+                    onChange={(event) => handleDraftChange(item.key, event.target.value)}
+                    className="textarea min-h-[140px]"
+                    placeholder={`请输入${item.label}`}
+                  />
+                ) : (
+                  <p className="text-foreground whitespace-pre-wrap leading-relaxed">
+                    {content}
+                  </p>
+                )}
               </div>
-              <p className="text-foreground whitespace-pre-wrap leading-relaxed">
-                {item.content}
-              </p>
-            </div>
-          ))}
+            );
+          })}
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <Link
               href={`/ai-expand?novelId=${novelId}&planDocumentId=${outline.planDocumentId}&version=${outline.version}`}
               className="btn-primary flex items-center gap-2"

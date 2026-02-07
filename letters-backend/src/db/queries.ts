@@ -588,6 +588,38 @@ export async function createPlanVersion(
   };
 }
 
+export async function createPlanVersionForDocument(
+  documentId: number,
+  outline: {
+    theme: string;
+    framework: string;
+    conflicts: string;
+    interactions: string;
+  }
+) {
+  const latest = await getLatestPlanVersion(documentId);
+  const nextVersion = (latest?.version || 0) + 1;
+
+  const inserted = await db
+    .insert(aiPlanVersions)
+    .values({
+      documentId,
+      version: nextVersion,
+      theme: outline.theme,
+      framework: outline.framework,
+      conflicts: outline.conflicts,
+      interactions: outline.interactions,
+    })
+    .returning();
+
+  await db
+    .update(aiPlanDocuments)
+    .set({ updatedAt: new Date() })
+    .where(eq(aiPlanDocuments.id, documentId));
+
+  return inserted[0];
+}
+
 export async function getLatestPlanByScope(
   userId: number,
   workspace: WorkspaceTypeValue,

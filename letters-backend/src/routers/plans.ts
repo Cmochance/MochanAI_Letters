@@ -98,4 +98,38 @@ export const plansRouter = router({
         createdAt: resolvedVersion.createdAt,
       };
     }),
+
+  saveVersion: protectedProcedure
+    .input(
+      z.object({
+        planDocumentId: z.number(),
+        theme: z.string(),
+        framework: z.string(),
+        conflicts: z.string(),
+        interactions: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const document = await db.getPlanDocumentById(ctx.user.id, input.planDocumentId);
+      if (!document) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "规划文档不存在" });
+      }
+
+      const version = await db.createPlanVersionForDocument(input.planDocumentId, {
+        theme: input.theme,
+        framework: input.framework,
+        conflicts: input.conflicts,
+        interactions: input.interactions,
+      });
+
+      return {
+        planDocumentId: input.planDocumentId,
+        version: version.version,
+        theme: version.theme,
+        framework: version.framework,
+        conflicts: version.conflicts,
+        interactions: version.interactions,
+        createdAt: version.createdAt,
+      };
+    }),
 });
