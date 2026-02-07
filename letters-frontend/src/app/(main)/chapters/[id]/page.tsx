@@ -1,20 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { countWords } from "@/lib/utils";
-import { ArrowLeft, Save, Sparkles } from "lucide-react";
-import { useDebouncedCallback } from "@/hooks/use-debounce";
+import { ArrowLeft, Save, Sparkles, Edit3 } from "lucide-react";
 
 export default function ChapterDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const chapterId = Number(params.id);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
@@ -26,6 +25,7 @@ export default function ChapterDetailPage() {
     onSuccess: () => {
       setLastSaved(new Date());
       setIsSaving(false);
+      setIsEditing(false);
     },
     onError: () => {
       setIsSaving(false);
@@ -37,38 +37,23 @@ export default function ChapterDetailPage() {
     if (chapter) {
       setTitle(chapter.title);
       setContent(chapter.content);
+      setIsEditing(false);
     }
   }, [chapter]);
 
-  // Auto-save with debounce
-  const debouncedSave = useDebouncedCallback(
-    useCallback(
-      (newTitle: string, newContent: string) => {
-        if (!chapter) return;
-        setIsSaving(true);
-        updateChapter.mutate({
-          id: chapterId,
-          title: newTitle,
-          content: newContent,
-        });
-      },
-      [chapter, chapterId, updateChapter]
-    ),
-    2000
-  );
-
-  const handleTitleChange = (newTitle: string) => {
-    setTitle(newTitle);
-    debouncedSave(newTitle, content);
-  };
-
-  const handleContentChange = (newContent: string) => {
-    setContent(newContent);
-    debouncedSave(title, newContent);
-  };
-
-  const handleManualSave = () => {
+  const handlePrimaryAction = () => {
     if (!chapter) return;
+
+    if (!isEditing) {
+      setIsEditing(true);
+      return;
+    }
+
+    if (title === chapter.title && content === chapter.content) {
+      setIsEditing(false);
+      return;
+    }
+
     setIsSaving(true);
     updateChapter.mutate({
       id: chapterId,
@@ -131,12 +116,21 @@ export default function ChapterDetailPage() {
                 </span>
               )}
               <button
-                onClick={handleManualSave}
+                onClick={handlePrimaryAction}
                 disabled={isSaving}
                 className="btn-secondary flex items-center gap-2 text-sm py-2"
               >
-                <Save className="w-4 h-4" />
-                {isSaving ? "保存中..." : "保存"}
+                {isEditing ? (
+                  <>
+                    <Save className="w-4 h-4" />
+                    {isSaving ? "保存中..." : "保存"}
+                  </>
+                ) : (
+                  <>
+                    <Edit3 className="w-4 h-4" />
+                    修改
+                  </>
+                )}
               </button>
               <Link
                 href={`/ai-outline?novelId=${chapter.novelId}&chapterId=${chapterId}`}
@@ -163,7 +157,8 @@ export default function ChapterDetailPage() {
         <input
           type="text"
           value={title}
-          onChange={(e) => handleTitleChange(e.target.value)}
+          onChange={(e) => setTitle(e.target.value)}
+          readOnly={!isEditing}
           className="w-full text-2xl font-serif font-bold text-foreground bg-transparent border-none outline-none mb-6 placeholder:text-muted/50"
           placeholder="章节标题"
         />
@@ -171,7 +166,8 @@ export default function ChapterDetailPage() {
         {/* Content Editor */}
         <textarea
           value={content}
-          onChange={(e) => handleContentChange(e.target.value)}
+          onChange={(e) => setContent(e.target.value)}
+          readOnly={!isEditing}
           className="w-full min-h-[60vh] text-lg leading-relaxed text-foreground bg-transparent border-none outline-none resize-none placeholder:text-muted/50 font-serif"
           placeholder="开始写作..."
         />
