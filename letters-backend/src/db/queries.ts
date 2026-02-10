@@ -16,6 +16,7 @@ import {
   paperSectionEmbeddings,
   paperNotes,
   paperNoteEmbeddings,
+  paperDataType,
   type InsertUser,
   type InsertNovel,
   type InsertChapter,
@@ -40,6 +41,7 @@ export type ExpandJobStatusValue = (typeof expandJobStatus.enumValues)[number];
 export type NoteCategoryValue = (typeof noteCategory.enumValues)[number];
 export type PaperNoteCategoryValue =
   (typeof paperNoteCategory.enumValues)[number];
+export type PaperDataTypeValue = (typeof paperDataType.enumValues)[number];
 
 // ============ Users ============
 
@@ -922,11 +924,34 @@ export async function getPaperSections(paperId: number) {
     .orderBy(paperSections.sectionNumber);
 }
 
+export async function getPaperFigureSections(paperId: number) {
+  return db
+    .select()
+    .from(paperSections)
+    .where(
+      and(eq(paperSections.paperId, paperId), sql`${paperSections.dataType} IS NOT NULL`)
+    )
+    .orderBy(paperSections.sectionNumber);
+}
+
 export async function getPaperSectionById(sectionId: number) {
   const result = await db
     .select()
     .from(paperSections)
     .where(eq(paperSections.id, sectionId))
+    .limit(1);
+
+  return result[0] || null;
+}
+
+export async function getPaperSectionByDataType(
+  paperId: number,
+  dataType: PaperDataTypeValue
+) {
+  const result = await db
+    .select()
+    .from(paperSections)
+    .where(and(eq(paperSections.paperId, paperId), eq(paperSections.dataType, dataType)))
     .limit(1);
 
   return result[0] || null;

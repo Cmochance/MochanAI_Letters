@@ -4,65 +4,32 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Download, FileText, FileCode } from "lucide-react";
-
-type ExportFormat = "txt" | "markdown";
+import { ArrowLeft, Download, FileText } from "lucide-react";
 
 export default function PaperExportPage() {
   const searchParams = useSearchParams();
   const paperId = Number(searchParams.get("paperId"));
-  const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("txt");
   const [isExporting, setIsExporting] = useState(false);
+  const [result, setResult] = useState<null | {
+    zh: { downloadUrl: string; filename: string };
+    en: { downloadUrl: string; filename: string };
+  }>(null);
 
-  const exportTxt = trpc.paperExport.txt.useMutation();
-  const exportMarkdown = trpc.paperExport.markdown.useMutation();
-
-  const formats = [
-    {
-      value: "txt" as const,
-      label: "纯文本",
-      description: "TXT 格式，兼容性最好",
-      icon: FileText,
-    },
-    {
-      value: "markdown" as const,
-      label: "Markdown",
-      description: "保留结构与标题层级",
-      icon: FileCode,
-    },
-  ];
+  const exportDocx = trpc.paperExport.docx.useMutation();
 
   const handleExport = async () => {
     if (!paperId) return;
     setIsExporting(true);
+    setResult(null);
 
     try {
-      let result: { content: string; filename: string };
-
-      if (selectedFormat === "txt") {
-        result = await exportTxt.mutateAsync({ paperId });
-      } else {
-        result = await exportMarkdown.mutateAsync({ paperId });
-      }
-
-      downloadTextFile(result.content, result.filename);
+      const data = await exportDocx.mutateAsync({ paperId });
+      setResult(data);
     } catch (error) {
-      console.error("Paper export failed", error);
+      console.error("Paper docx export failed", error);
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const downloadTextFile = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
   };
 
   if (!paperId) {
@@ -89,46 +56,22 @@ export default function PaperExportPage() {
         </Link>
         <div>
           <h1 className="page-title mb-0">导出论文</h1>
-          <p className="text-muted text-sm">选择格式并下载论文</p>
+          <p className="text-muted text-sm">生成 Word 文档（中文/英文各一份）</p>
         </div>
       </div>
 
-      <div className="space-y-3 mb-8">
-        {formats.map((format) => {
-          const Icon = format.icon;
-          return (
-            <button
-              key={format.value}
-              onClick={() => setSelectedFormat(format.value)}
-              className={`card w-full text-left flex items-center gap-4 transition-all ${
-                selectedFormat === format.value
-                  ? "border-primary bg-primary/5"
-                  : "hover:border-primary/30"
-              }`}
-            >
-              <div
-                className={`p-3 rounded-lg ${
-                  selectedFormat === format.value
-                    ? "bg-primary text-white"
-                    : "bg-muted/10 text-muted"
-                }`}
-              >
-                <Icon className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-medium text-foreground">{format.label}</h3>
-                <p className="text-sm text-muted">{format.description}</p>
-              </div>
-              <div
-                className={`w-5 h-5 rounded-full border-2 ${
-                  selectedFormat === format.value
-                    ? "border-primary bg-primary"
-                    : "border-border"
-                }`}
-              />
-            </button>
-          );
-        })}
+      <div className="card mb-6">
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-lg bg-muted/10 text-muted">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-medium text-foreground">Word（.docx）</h3>
+            <p className="text-sm text-muted">
+              将按顺序导出：标题、摘要、简介、文章主体（含图片）、结论
+            </p>
+          </div>
+        </div>
       </div>
 
       <button
@@ -137,8 +80,36 @@ export default function PaperExportPage() {
         className="btn-primary flex items-center gap-2"
       >
         <Download className="w-4 h-4" />
-        {isExporting ? "导出中..." : "开始导出"}
+        {isExporting ? "导出中..." : "生成并获取下载链接"}
       </button>
+
+      {exportDocx.isError && (
+        <div className="card bg-error/10 border-error/20 mt-6">
+          <p className="text-error">导出失败：{exportDocx.error.message}</p>
+        </div>
+      )}
+
+      {result && (
+        <div className="mt-6 space-y-3">
+          <a
+            href={result.zh.downloadUrl}
+            download={result.zh.filename}
+            className="btn-secondary inline-flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            下载中文 Word
+          </a>
+          <a
+            href={result.en.downloadUrl}
+            download={result.en.filename}
+            className="btn-secondary inline-flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            下载英文 Word
+          </a>
+        </div>
+      )}
     </div>
   );
 }
+

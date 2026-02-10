@@ -85,9 +85,11 @@ export async function generateNovelCover(
       throw new Error(`Image generation failed: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    const generatedUrl = data?.data?.[0]?.url as string | undefined;
-    const generatedB64 = data?.data?.[0]?.b64_json as string | undefined;
+    const data = (await response.json()) as {
+      data?: Array<{ url?: string; b64_json?: string }>;
+    };
+    const generatedUrl = data?.data?.[0]?.url;
+    const generatedB64 = data?.data?.[0]?.b64_json;
 
     if (!generatedUrl && !generatedB64) {
       throw new Error("Image generation API returned no image payload");

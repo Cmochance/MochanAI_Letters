@@ -270,7 +270,15 @@ export async function vectorizePaperSection(
     throw new Error(`Paper section ${sectionId} not found`);
   }
 
-  const embeddingSource = `${section.title}\n${section.content}`;
+  const embeddingSource = [
+    section.title,
+    section.content,
+    section.contentEn,
+    section.figureCaptionZh,
+    section.figureCaptionEn,
+  ]
+    .filter(Boolean)
+    .join("\n");
   if (embeddingSource.length < MIN_CONTENT_LENGTH) {
     await db.deletePaperSectionEmbeddings(section.id);
     return { chunksCreated: 0 };
@@ -738,42 +746,50 @@ export async function getPaperAIContext(
 
   let ragContext = "";
   if (query && sectionEmbeddingCount > 0) {
-    const results = await searchPaperSectionContext(
-      paperId,
-      query,
-      ragLimit,
-      userApiKey,
-      userBaseUrl,
-      userModel
-    );
+    try {
+      const results = await searchPaperSectionContext(
+        paperId,
+        query,
+        ragLimit,
+        userApiKey,
+        userBaseUrl,
+        userModel
+      );
 
-    ragContext = results
-      .filter((r) => r.similarity > 0.45)
-      .map((r) => truncateContext(r.content, 350))
-      .join("\n\n---\n\n");
+      ragContext = results
+        .filter((r) => r.similarity > 0.45)
+        .map((r) => truncateContext(r.content, 350))
+        .join("\n\n---\n\n");
+    } catch (error) {
+      console.error("Paper section RAG search failed:", error);
+    }
   }
 
   let noteRagContext = "";
   if (query && noteEmbeddingCount > 0) {
-    const results = await searchPaperNoteContext(
-      paperId,
-      query,
-      noteRagLimit,
-      userApiKey,
-      userBaseUrl,
-      userModel
-    );
+    try {
+      const results = await searchPaperNoteContext(
+        paperId,
+        query,
+        noteRagLimit,
+        userApiKey,
+        userBaseUrl,
+        userModel
+      );
 
-    noteRagContext = results
-      .filter((r) => r.similarity > 0.45)
-      .map(
-        (r) =>
-          `[${PAPER_NOTE_CATEGORY_LABELS[r.category]}] ${truncateContext(
-            r.content,
-            240
-          )}`
-      )
-      .join("\n");
+      noteRagContext = results
+        .filter((r) => r.similarity > 0.45)
+        .map(
+          (r) =>
+            `[${PAPER_NOTE_CATEGORY_LABELS[r.category]}] ${truncateContext(
+              r.content,
+              240
+            )}`
+        )
+        .join("\n");
+    } catch (error) {
+      console.error("Paper note RAG search failed:", error);
+    }
   }
 
   return {

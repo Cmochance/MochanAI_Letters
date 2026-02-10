@@ -1,237 +1,125 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Sparkles, Copy, Check, History, Edit3, Save, X } from "lucide-react";
+import { ArrowLeft, Sparkles, Eye, Save, RefreshCw } from "lucide-react";
 
-type OutlinePayload = {
-  theme: string;
-  framework: string;
-  conflicts: string;
-  interactions: string;
+type PartType = "body" | "introduction" | "conclusion" | "abstract" | "title";
+
+type Draft = {
+  zh: string;
+  en: string;
+  keywordsZh?: string;
+  keywordsEn?: string;
 };
 
-type OutlineState = (OutlinePayload & {
-  planDocumentId: number;
-  version: number;
-}) | null;
+function partLabel(part: PartType) {
+  if (part === "body") return "生成文章主体";
+  if (part === "introduction") return "生成简介";
+  if (part === "conclusion") return "生成结论";
+  if (part === "abstract") return "生成摘要";
+  return "生成标题";
+}
 
-export default function PaperAIOutlinePage() {
+function savedLabel(part: PartType) {
+  if (part === "body") return "文章主体";
+  if (part === "introduction") return "简介";
+  if (part === "conclusion") return "结论";
+  if (part === "abstract") return "摘要";
+  return "标题";
+}
+
+export default function PaperWritingPage() {
   const searchParams = useSearchParams();
   const paperId = Number(searchParams.get("paperId"));
 
-  const [sectionNumber, setSectionNumber] = useState(1);
-  const [outline, setOutline] = useState<OutlineState>(null);
-  const [draft, setDraft] = useState<OutlinePayload>({
-    theme: "",
-    framework: "",
-    conflicts: "",
-    interactions: "",
-  });
-  const [isEditing, setIsEditing] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
-  const [restored, setRestored] = useState(false);
-  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  const [activePart, setActivePart] = useState<PartType | null>(null);
+  const [drafts, setDrafts] = useState<Partial<Record<PartType, Draft>>>({});
+  const [viewPart, setViewPart] = useState<PartType | null>(null);
+  const [viewLang, setViewLang] = useState<"zh" | "en">("zh");
 
   const utils = trpc.useUtils();
 
-  const latestPlanQuery = trpc.plans.getLatest.useQuery(
-    {
-      workspaceType: "paper",
-      workspaceId: paperId,
-      sectionNumber,
-    },
-    {
-      enabled: Number.isFinite(paperId) && paperId > 0,
-    }
+  const latestQuery = trpc.paperWriting.getLatest.useQuery(
+    { paperId },
+    { enabled: Number.isFinite(paperId) && paperId > 0 }
   );
 
-  const planDocumentId = outline?.planDocumentId ?? latestPlanQuery.data?.planDocumentId;
-
-  const versionsQuery = trpc.plans.listVersions.useQuery(
-    {
-      planDocumentId: planDocumentId || -1,
+  const generatePart = trpc.paperWriting.generatePart.useMutation({
+    onSuccess: (data, variables) => {
+      setDrafts((prev) => ({
+        ...prev,
+        [variables.partType]: data,
+      }));
+      setViewPart(variables.partType);
+      setViewLang("zh");
+      setActivePart(null);
     },
-    {
-      enabled: Boolean(planDocumentId),
-    }
-  );
+    onError: () => {
+      setActivePart(null);
+    },
+  });
 
-  useEffect(() => {
-    if (!latestPlanQuery.data) {
-      setOutline(null);
-      setDraft({ theme: "", framework: "", conflicts: "", interactions: "" });
-      setRestored(false);
-      setSelectedVersion(null);
-      setIsEditing(false);
-      return;
-    }
-
-    const nextOutline = {
-      theme: latestPlanQuery.data.theme,
-      framework: latestPlanQuery.data.framework,
-      conflicts: latestPlanQuery.data.conflicts,
-      interactions: latestPlanQuery.data.interactions,
-      planDocumentId: latestPlanQuery.data.planDocumentId,
-      version: latestPlanQuery.data.version,
-    };
-
-    setOutline(nextOutline);
-    setDraft({
-      theme: nextOutline.theme,
-      framework: nextOutline.framework,
-      conflicts: nextOutline.conflicts,
-      interactions: nextOutline.interactions,
-    });
-    setSelectedVersion(latestPlanQuery.data.version);
-    setRestored(true);
-    setIsEditing(false);
-  }, [latestPlanQuery.data]);
-
-  const generateOutline = trpc.paperAi.generateOutline.useMutation({
-    onSuccess: (data) => {
-      const nextOutline = {
-        theme: data.theme,
-        framework: data.framework,
-        conflicts: data.conflicts,
-        interactions: data.interactions,
-        planDocumentId: data.planDocumentId,
-        version: data.version,
-      };
-      setOutline(nextOutline);
-      setDraft({
-        theme: nextOutline.theme,
-        framework: nextOutline.framework,
-        conflicts: nextOutline.conflicts,
-        interactions: nextOutline.interactions,
-      });
-      setSelectedVersion(data.version);
-      setRestored(false);
-      setIsEditing(false);
-      utils.plans.getLatest.invalidate({
-        workspaceType: "paper",
-        workspaceId: paperId,
-        sectionNumber,
-      });
-      utils.plans.listVersions.invalidate({
-        planDocumentId: data.planDocumentId,
+  const savePart = trpc.paperWriting.savePart.useMutation({
+    onSuccess: (_data, variables) => {
+      utils.paperWriting.getLatest.invalidate({ paperId });
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[variables.partType];
+        return next;
       });
     },
   });
 
-  const saveVersion = trpc.plans.saveVersion.useMutation({
-    onSuccess: (data) => {
-      const nextOutline = {
-        theme: data.theme,
-        framework: data.framework,
-        conflicts: data.conflicts,
-        interactions: data.interactions,
-        planDocumentId: data.planDocumentId,
-        version: data.version,
-      };
-      setOutline(nextOutline);
-      setDraft({
-        theme: nextOutline.theme,
-        framework: nextOutline.framework,
-        conflicts: nextOutline.conflicts,
-        interactions: nextOutline.interactions,
-      });
-      setSelectedVersion(data.version);
-      setRestored(false);
-      setIsEditing(false);
-      utils.plans.listVersions.invalidate({
-        planDocumentId: data.planDocumentId,
-      });
-      utils.plans.getLatest.invalidate({
-        workspaceType: "paper",
-        workspaceId: paperId,
-        sectionNumber,
-      });
-    },
-  });
+  const isLocked = generatePart.isPending || savePart.isPending;
 
-  const handleGenerate = () => {
-    if (!paperId) return;
-    setRestored(false);
-    generateOutline.mutate({ paperId, sectionNumber });
+  const savedContent = useMemo(() => {
+    const d = latestQuery.data;
+    if (!d) return null;
+    return {
+      title: { zh: d.aiTitleZh || "", en: d.aiTitleEn || "" },
+      abstract: {
+        zh: d.aiAbstractZh || "",
+        en: d.aiAbstractEn || "",
+        keywordsZh: d.aiKeywordsZh || "",
+        keywordsEn: d.aiKeywordsEn || "",
+      },
+      introduction: { zh: d.aiIntroductionZh || "", en: d.aiIntroductionEn || "" },
+      body: { zh: d.aiBodyZh || "", en: d.aiBodyEn || "" },
+      conclusion: { zh: d.aiConclusionZh || "", en: d.aiConclusionEn || "" },
+    } as Record<PartType, Draft>;
+  }, [latestQuery.data]);
+
+  const parts: PartType[] = ["body", "introduction", "conclusion", "abstract", "title"];
+
+  const handleGenerate = async (partType: PartType) => {
+    if (!paperId || isLocked) return;
+    setActivePart(partType);
+    await generatePart.mutateAsync({ paperId, partType });
   };
 
-  const handleCopy = async (text: string, field: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopied(field);
-    setTimeout(() => setCopied(null), 2000);
+  const handleOpenView = (partType: PartType) => {
+    setViewPart(partType);
+    setViewLang("zh");
   };
 
-  const handleLoadVersion = async (version: number) => {
-    if (!planDocumentId) return;
+  const viewDraft = viewPart ? drafts[viewPart] : null;
+  const viewSaved = viewPart && savedContent ? savedContent[viewPart] : null;
+  const displayed = viewDraft || viewSaved;
 
-    const plan = await utils.plans.getVersion.fetch({
-      planDocumentId,
-      version,
-    });
+  const canSaveCurrent = Boolean(viewPart && viewDraft && viewDraft.zh && viewDraft.en);
 
-    if (!plan) return;
-
-    setOutline({
-      theme: plan.theme,
-      framework: plan.framework,
-      conflicts: plan.conflicts,
-      interactions: plan.interactions,
-      planDocumentId,
-      version: plan.version,
-    });
-    setDraft({
-      theme: plan.theme,
-      framework: plan.framework,
-      conflicts: plan.conflicts,
-      interactions: plan.interactions,
-    });
-    setSelectedVersion(version);
-    setRestored(true);
-    setIsEditing(false);
-  };
-
-  const outlineText = useMemo(() => {
-    if (!outline) return "";
-    return `${outline.theme}\n\n${outline.framework}\n\n${outline.conflicts}\n\n${outline.interactions}`;
-  }, [outline]);
-
-  const handleDraftChange = (key: keyof OutlinePayload, value: string) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleStartEdit = () => {
-    if (!outline) return;
-    setDraft({
-      theme: outline.theme,
-      framework: outline.framework,
-      conflicts: outline.conflicts,
-      interactions: outline.interactions,
-    });
-    setIsEditing(true);
-  };
-
-  const handleCancelEdit = () => {
-    if (!outline) return;
-    setDraft({
-      theme: outline.theme,
-      framework: outline.framework,
-      conflicts: outline.conflicts,
-      interactions: outline.interactions,
-    });
-    setIsEditing(false);
-  };
-
-  const handleSaveEdit = () => {
-    if (!outline) return;
-    saveVersion.mutate({
-      planDocumentId: outline.planDocumentId,
-      theme: draft.theme,
-      framework: draft.framework,
-      conflicts: draft.conflicts,
-      interactions: draft.interactions,
+  const handleSave = async () => {
+    if (!paperId || !viewPart || !viewDraft) return;
+    await savePart.mutateAsync({
+      paperId,
+      partType: viewPart,
+      zh: viewDraft.zh,
+      en: viewDraft.en,
+      keywordsZh: viewPart === "abstract" ? viewDraft.keywordsZh : undefined,
+      keywordsEn: viewPart === "abstract" ? viewDraft.keywordsEn : undefined,
     });
   };
 
@@ -258,168 +146,167 @@ export default function PaperAIOutlinePage() {
           <ArrowLeft className="w-5 h-5 text-muted" />
         </Link>
         <div>
-          <h1 className="page-title mb-0">AI 论文规划</h1>
-          <p className="text-muted text-sm">生成后自动保存，可跨会话恢复</p>
+          <h1 className="page-title mb-0">全文撰写</h1>
+          <p className="text-muted text-sm">生成后可查看详情，确认保存后覆盖为最新内容</p>
         </div>
       </div>
 
-      <div className="card mb-6">
-        <div className="flex items-end gap-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium mb-2">小节序号</label>
-            <input
-              type="number"
-              value={sectionNumber}
-              onChange={(e) => setSectionNumber(Number(e.target.value || 1))}
-              className="input"
-              min={1}
-              placeholder="请输入小节序号"
-            />
-          </div>
-          <button
-            onClick={handleGenerate}
-            disabled={generateOutline.isPending}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Sparkles className="w-4 h-4" />
-            {generateOutline.isPending ? "生成中..." : "生成并保存规划"}
-          </button>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {parts.map((part) => {
+          const hasDraft = Boolean(drafts[part]);
+          const hasSaved = Boolean(
+            savedContent &&
+              (savedContent[part].zh?.trim() || savedContent[part].en?.trim())
+          );
+          const showView = hasDraft || hasSaved;
 
-        {restored && outline && (
-          <div className="mt-4 p-3 bg-primary/10 border border-primary/20 rounded-lg text-sm text-primary">
-            已恢复第 {sectionNumber} 节的最新规划（v{outline.version}）
-          </div>
-        )}
-      </div>
-
-      {generateOutline.isError && (
-        <div className="card bg-error/10 border-error/20 mb-6">
-          <p className="text-error">生成失败：{generateOutline.error.message}</p>
-        </div>
-      )}
-
-      {saveVersion.isError && (
-        <div className="card bg-error/10 border-error/20 mb-6">
-          <p className="text-error">保存失败：{saveVersion.error.message}</p>
-        </div>
-      )}
-
-      {outline && (
-        <div className="space-y-4">
-          <div className="card">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <History className="w-4 h-4" />
-                当前版本：v{outline.version}
+          return (
+            <div key={part} className="card flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-medium text-foreground">{savedLabel(part)}</div>
+                <div className="text-xs text-muted">
+                  {hasDraft ? "已生成草稿（未保存）" : hasSaved ? "已保存最新内容" : "未生成"}
+                </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {versionsQuery.data && versionsQuery.data.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted">历史版本</span>
-                    <select
-                      value={selectedVersion || outline.version}
-                      onChange={(event) => {
-                        const version = Number(event.target.value);
-                        if (Number.isFinite(version)) {
-                          handleLoadVersion(version).catch(console.error);
-                        }
-                      }}
-                      className="input py-2 min-w-[140px]"
-                    >
-                      {versionsQuery.data.map((version) => (
-                        <option key={version.version} value={version.version}>
-                          v{version.version}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
 
-                {!isEditing && (
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {showView && (
                   <button
-                    onClick={handleStartEdit}
-                    className="btn-secondary flex items-center gap-2"
+                    onClick={() => handleOpenView(part)}
+                    disabled={isLocked}
+                    className="btn-secondary flex items-center gap-2 text-sm py-2 disabled:opacity-50"
                   >
-                    <Edit3 className="w-4 h-4" />
-                    编辑规划
+                    <Eye className="w-4 h-4" />
+                    查看详细内容
                   </button>
                 )}
-                {isEditing && (
-                  <>
-                    <button
-                      onClick={handleSaveEdit}
-                      disabled={saveVersion.isPending}
-                      className="btn-primary flex items-center gap-2"
-                    >
-                      <Save className="w-4 h-4" />
-                      {saveVersion.isPending ? "保存中..." : "保存为新版本"}
-                    </button>
-                    <button onClick={handleCancelEdit} className="btn-secondary flex items-center gap-2">
-                      <X className="w-4 h-4" />
-                      取消编辑
-                    </button>
-                  </>
-                )}
+
+                <button
+                  onClick={() => {
+                    handleGenerate(part).catch(console.error);
+                  }}
+                  disabled={isLocked}
+                  className="btn-primary flex items-center gap-2 text-sm py-2 disabled:opacity-50"
+                >
+                  {activePart === part && generatePart.isPending ? (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      生成中...
+                    </>
+                  ) : hasDraft || hasSaved ? (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      重新生成
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      {partLabel(part)}
+                    </>
+                  )}
+                </button>
               </div>
             </div>
-          </div>
+          );
+        })}
+      </div>
 
-          {([
-            { key: "theme", label: "核心论点" },
-            { key: "framework", label: "论证结构" },
-            { key: "conflicts", label: "争议与风险" },
-            { key: "interactions", label: "证据与衔接" },
-          ] as Array<{ key: keyof OutlinePayload; label: string }>).map((item) => {
-            const content = isEditing ? draft[item.key] : outline[item.key];
-            return (
-              <div key={item.key} className="card">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-serif font-semibold text-foreground">{item.label}</h3>
-                  <button
-                    onClick={() => handleCopy(content, item.key)}
-                    className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-muted/10 transition-colors"
-                  >
-                    {copied === item.key ? (
-                      <Check className="w-4 h-4 text-success" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </button>
+      {generatePart.isError && (
+        <div className="card bg-error/10 border-error/20 mt-6">
+          <p className="text-error">生成失败：{generatePart.error.message}</p>
+        </div>
+      )}
+
+      {savePart.isError && (
+        <div className="card bg-error/10 border-error/20 mt-6">
+          <p className="text-error">保存失败：{savePart.error.message}</p>
+        </div>
+      )}
+
+      {viewPart && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="card w-full max-w-3xl mx-4 max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between gap-4 pb-3 border-b border-border">
+              <div className="min-w-0">
+                <div className="text-lg font-serif font-semibold text-foreground">
+                  {savedLabel(viewPart)}
                 </div>
-                {isEditing ? (
-                  <textarea
-                    value={content}
-                    onChange={(event) => handleDraftChange(item.key, event.target.value)}
-                    className="textarea min-h-[140px]"
-                    placeholder={`请输入${item.label}`}
-                  />
-                ) : (
-                  <p className="text-foreground whitespace-pre-wrap leading-relaxed">
-                    {content}
-                  </p>
-                )}
+                <div className="text-xs text-muted">
+                  {viewDraft ? "草稿预览（未保存）" : "已保存内容"}
+                </div>
               </div>
-            );
-          })}
+              <button
+                onClick={() => setViewPart(null)}
+                className="btn-secondary text-sm py-2"
+              >
+                关闭
+              </button>
+            </div>
 
-          <div className="flex gap-3 flex-wrap">
-            <Link
-              href={`/paper-ai-expand?paperId=${paperId}&planDocumentId=${outline.planDocumentId}&version=${outline.version}`}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Sparkles className="w-4 h-4" />
-              使用此规划扩写
-            </Link>
-            <button onClick={handleGenerate} className="btn-secondary">
-              重新生成并保存新版本
-            </button>
-            <button onClick={() => handleCopy(outlineText, "all")} className="btn-secondary">
-              {copied === "all" ? "已复制" : "复制全文"}
-            </button>
+            <div className="pt-4 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setViewLang("zh")}
+                  className={`px-3 py-1 rounded-lg text-sm border transition-colors ${
+                    viewLang === "zh"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted hover:text-foreground hover:border-primary/40"
+                  }`}
+                >
+                  中文
+                </button>
+                <button
+                  onClick={() => setViewLang("en")}
+                  className={`px-3 py-1 rounded-lg text-sm border transition-colors ${
+                    viewLang === "en"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted hover:text-foreground hover:border-primary/40"
+                  }`}
+                >
+                  English
+                </button>
+              </div>
+
+              {canSaveCurrent && (
+                <button
+                  onClick={() => {
+                    handleSave().catch(console.error);
+                  }}
+                  disabled={savePart.isPending}
+                  className="btn-primary flex items-center gap-2 text-sm py-2 disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {savePart.isPending ? "保存中..." : "保存为最新内容"}
+                </button>
+              )}
+            </div>
+
+            <div className="mt-4 flex-1 overflow-y-auto rounded-lg border border-border bg-surface/40 p-4">
+              {!displayed && <div className="text-sm text-muted">暂无内容</div>}
+
+              {displayed && (
+                <div className="whitespace-pre-wrap leading-relaxed text-foreground font-serif">
+                  {viewLang === "zh" ? displayed.zh : displayed.en}
+                </div>
+              )}
+
+              {viewPart === "abstract" && displayed && (
+                <div className="mt-6 pt-4 border-t border-border">
+                  <div className="text-sm font-medium text-foreground mb-2">
+                    {viewLang === "zh" ? "关键词" : "Keywords"}
+                  </div>
+                  <div className="text-sm text-foreground whitespace-pre-wrap">
+                    {viewLang === "zh"
+                      ? displayed.keywordsZh || ""
+                      : displayed.keywordsEn || ""}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
+

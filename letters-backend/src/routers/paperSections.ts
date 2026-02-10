@@ -77,6 +77,9 @@ export const paperSectionsRouter = router({
         id: z.number(),
         title: z.string().min(1).max(255).optional(),
         content: z.string().optional(),
+        contentEn: z.string().optional(),
+        figureCaptionZh: z.string().optional(),
+        figureCaptionEn: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -90,6 +93,9 @@ export const paperSectionsRouter = router({
       const updateData: Partial<{
         title: string;
         content: string;
+        contentEn: string | null;
+        figureCaptionZh: string | null;
+        figureCaptionEn: string | null;
         wordCount: number;
       }> = {};
       if (input.title !== undefined) updateData.title = input.title;
@@ -97,10 +103,15 @@ export const paperSectionsRouter = router({
         updateData.content = input.content;
         updateData.wordCount = countWords(input.content);
       }
+      if (input.contentEn !== undefined) updateData.contentEn = input.contentEn;
+      if (input.figureCaptionZh !== undefined)
+        updateData.figureCaptionZh = input.figureCaptionZh;
+      if (input.figureCaptionEn !== undefined)
+        updateData.figureCaptionEn = input.figureCaptionEn;
 
       await db.updatePaperSection(input.id, updateData);
 
-      if (input.content !== undefined) {
+      if (input.content !== undefined || input.contentEn !== undefined) {
         const settings = await db.getUserSettings(ctx.user.id);
         vectorizePaperSection(
           input.id,

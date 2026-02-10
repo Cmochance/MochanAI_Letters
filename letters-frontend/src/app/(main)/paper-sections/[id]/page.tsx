@@ -13,7 +13,9 @@ export default function PaperSectionDetailPage() {
   const sectionId = Number(params.id);
 
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [activeLang, setActiveLang] = useState<"zh" | "en">("zh");
+  const [contentZh, setContentZh] = useState("");
+  const [contentEn, setContentEn] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
@@ -35,19 +37,19 @@ export default function PaperSectionDetailPage() {
   useEffect(() => {
     if (section) {
       setTitle(section.title);
-      setContent(section.content);
+      setContentZh(section.content);
+      setContentEn(section.contentEn || "");
     }
   }, [section]);
 
   const debouncedSave = useDebouncedCallback(
     useCallback(
-      (newTitle: string, newContent: string) => {
+      (payload: { title?: string; content?: string; contentEn?: string }) => {
         if (!section) return;
         setIsSaving(true);
         updateSection.mutate({
           id: sectionId,
-          title: newTitle,
-          content: newContent,
+          ...payload,
         });
       },
       [section, sectionId, updateSection]
@@ -57,12 +59,17 @@ export default function PaperSectionDetailPage() {
 
   const handleTitleChange = (newTitle: string) => {
     setTitle(newTitle);
-    debouncedSave(newTitle, content);
+    debouncedSave({ title: newTitle });
   };
 
   const handleContentChange = (newContent: string) => {
-    setContent(newContent);
-    debouncedSave(title, newContent);
+    if (activeLang === "zh") {
+      setContentZh(newContent);
+      debouncedSave({ content: newContent });
+      return;
+    }
+    setContentEn(newContent);
+    debouncedSave({ contentEn: newContent });
   };
 
   const handleManualSave = () => {
@@ -71,11 +78,12 @@ export default function PaperSectionDetailPage() {
     updateSection.mutate({
       id: sectionId,
       title,
-      content,
+      content: contentZh,
+      contentEn,
     });
   };
 
-  const wordCount = countWords(content);
+  const wordCount = countWords(activeLang === "zh" ? contentZh : contentEn);
 
   if (isLoading) {
     return (
@@ -144,6 +152,23 @@ export default function PaperSectionDetailPage() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-8">
+        {section.figureUrl && (
+          <div className="mb-8">
+            <img
+              src={section.figureUrl}
+              alt={section.title}
+              className="w-full rounded-xl border border-border bg-surface/40"
+            />
+            {(section.figureCaptionZh || section.figureCaptionEn) && (
+              <p className="text-sm text-muted mt-3 text-center italic whitespace-pre-wrap">
+                {activeLang === "zh"
+                  ? section.figureCaptionZh || ""
+                  : section.figureCaptionEn || ""}
+              </p>
+            )}
+          </div>
+        )}
+
         <input
           type="text"
           value={title}
@@ -152,8 +177,31 @@ export default function PaperSectionDetailPage() {
           placeholder="小节标题"
         />
 
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setActiveLang("zh")}
+            className={`px-3 py-1 rounded-lg text-sm border transition-colors ${
+              activeLang === "zh"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted hover:text-foreground hover:border-primary/40"
+            }`}
+          >
+            中文
+          </button>
+          <button
+            onClick={() => setActiveLang("en")}
+            className={`px-3 py-1 rounded-lg text-sm border transition-colors ${
+              activeLang === "en"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted hover:text-foreground hover:border-primary/40"
+            }`}
+          >
+            English
+          </button>
+        </div>
+
         <textarea
-          value={content}
+          value={activeLang === "zh" ? contentZh : contentEn}
           onChange={(e) => handleContentChange(e.target.value)}
           className="w-full min-h-[60vh] text-lg leading-relaxed text-foreground bg-transparent border-none outline-none resize-none placeholder:text-muted/50 font-serif"
           placeholder="开始写作学术内容..."

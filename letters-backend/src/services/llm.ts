@@ -53,7 +53,7 @@ export async function invokeLLM(options: LLMOptions): Promise<LLMResponse> {
     throw new Error(`LLM API call failed: ${response.status} - ${errorText}`);
   }
 
-  return response.json();
+  return (await response.json()) as LLMResponse;
 }
 
 /**
@@ -87,6 +87,7 @@ export async function callUserAPI(
     throw new Error(`API call failed: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json();
-  return data.choices[0].message.content;
+  const data = (await response.json()) as LLMResponse;
+  const content = data?.choices?.[0]?.message?.content;
+  return typeof content === "string" ? content : JSON.stringify(content);
 }

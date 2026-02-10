@@ -169,6 +169,20 @@ export const paperNoteCategory = pgEnum("paper_note_category", [
   "citations_todo",
 ]);
 
+export const paperDataType = pgEnum("paper_data_type", [
+  "line_chart",
+  "bar_chart",
+  "stacked_bar_chart",
+  "scatter_plot",
+  "histogram",
+  "box_plot",
+  "heatmap",
+  "pie_chart",
+  "table",
+  "map",
+  "other",
+]);
+
 /**
  * Notes table - stores inspiration notes
  */
@@ -311,6 +325,18 @@ export const papers = pgTable("papers", {
     .references(() => users.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
+  aiTitleZh: text("ai_title_zh"),
+  aiTitleEn: text("ai_title_en"),
+  aiAbstractZh: text("ai_abstract_zh"),
+  aiAbstractEn: text("ai_abstract_en"),
+  aiKeywordsZh: text("ai_keywords_zh"),
+  aiKeywordsEn: text("ai_keywords_en"),
+  aiIntroductionZh: text("ai_introduction_zh"),
+  aiIntroductionEn: text("ai_introduction_en"),
+  aiBodyZh: text("ai_body_zh"),
+  aiBodyEn: text("ai_body_en"),
+  aiConclusionZh: text("ai_conclusion_zh"),
+  aiConclusionEn: text("ai_conclusion_en"),
   totalWords: integer("total_words").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -327,6 +353,14 @@ export const paperSections = pgTable("paper_sections", {
   sectionNumber: integer("section_number").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   content: text("content").notNull(),
+  contentEn: text("content_en"),
+  dataType: paperDataType("data_type"),
+  figureKey: varchar("figure_key", { length: 500 }),
+  figureUrl: varchar("figure_url", { length: 500 }),
+  figureContentType: varchar("figure_content_type", { length: 100 }),
+  figureFilename: varchar("figure_filename", { length: 255 }),
+  figureCaptionZh: text("figure_caption_zh"),
+  figureCaptionEn: text("figure_caption_en"),
   wordCount: integer("word_count").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

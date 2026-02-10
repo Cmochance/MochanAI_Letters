@@ -6,6 +6,7 @@ import {
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Readable } from "node:stream";
 
 /**
  * Cloudflare R2 Storage Service
@@ -131,6 +132,66 @@ export async function getDownloadUrl(
   });
 
   return getSignedUrl(client, command, { expiresIn });
+}
+
+function isReadableStream(body: unknown): body is Readable {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    // @ts-expect-error - runtime duck typing for Node.js Readable
+    typeof body.on === "function" &&
+    // @ts-expect-error - runtime duck typing for Node.js Readable
+    typeof body.pipe === "function"
+  );
+}
+
+async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Download a file from R2 storage as Buffer
+ */
+export async function downloadFileBuffer(key: string): Promise<Buffer> {
+  const client = getS3Client();
+  const bucket = getBucketName();
+
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+  });
+
+  const response = await client.send(command);
+  const body = response.Body;
+  if (!body) {
+    throw new Error(`Empty R2 object body for key: ${key}`);
+  }
+
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+
+  if (isReadableStream(body)) {
+    return streamToBuffer(body);
+  }
+
+  // Fallback for environments where Body might expose arrayBuffer()
+  // @ts-expect-error - optional compatibility path
+  if (typeof body.arrayBuffer === "function") {
+    // @ts-expect-error - optional compatibility path
+    const ab = await body.arrayBuffer();
+    return Buffer.from(ab);
+  }
+
+  throw new Error(`Unsupported R2 object body type for key: ${key}`);
 }
 
 /**

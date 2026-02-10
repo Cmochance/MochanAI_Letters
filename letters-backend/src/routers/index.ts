@@ -12,6 +12,9 @@ import { paperSectionsRouter } from "./paperSections.js";
 import { paperNotesRouter } from "./paperNotes.js";
 import { paperAiRouter } from "./paperAi.js";
 import { paperExportRouter } from "./paperExport.js";
+import { paperFilesRouter } from "./paperFiles.js";
+import { paperFiguresRouter } from "./paperFigures.js";
+import { paperWritingRouter } from "./paperWriting.js";
 
 export const appRouter = router({
   // System routes
@@ -41,6 +44,9 @@ export const appRouter = router({
   paperNotes: paperNotesRouter,
   paperAi: paperAiRouter,
   paperExport: paperExportRouter,
+  paperFiles: paperFilesRouter,
+  paperFigures: paperFiguresRouter,
+  paperWriting: paperWritingRouter,
 });
 
 export type AppRouter = typeof appRouter;
