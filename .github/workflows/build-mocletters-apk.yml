@@ -1,0 +1,72 @@
+name: Build Mocletters APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "mobile/mocletters-android/**"
+      - ".github/workflows/build-mocletters-apk.yml"
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Generate signing keystore
+        run: |
+          keytool -genkeypair \
+            -alias mocletters \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Mocletters,O=Mochan,C=CN" \
+            -storetype JKS \
+            -keystore "$RUNNER_TEMP/mocletters-release.jks" \
+            -storepass "mocletters123" \
+            -keypass "mocletters123"
+
+      - name: Build signed release APK
+        run: |
+          gradle -p mobile/mocletters-android :app:assembleRelease \
+            -PMOC_KEYSTORE_PATH="$RUNNER_TEMP/mocletters-release.jks" \
+            -PMOC_KEYSTORE_PASSWORD="mocletters123" \
+            -PMOC_KEY_ALIAS="mocletters" \
+            -PMOC_KEY_PASSWORD="mocletters123" \
+            --no-daemon --stacktrace
+
+      - name: Prepare APK artifact
+        run: |
+          mkdir -p dist
+          cp mobile/mocletters-android/app/build/outputs/apk/release/app-release.apk dist/Mocletters-v1.0.0.apk
+          sha256sum dist/Mocletters-v1.0.0.apk > dist/Mocletters-v1.0.0.apk.sha256
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mocletters-v1.0.0
+          path: dist/*
+          if-no-files-found: error

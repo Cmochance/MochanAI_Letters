@@ -1,0 +1,59 @@
+plugins {
+  id 'com.android.application'
+}
+
+android {
+  namespace 'com.mochance.mocletters'
+  compileSdk 34
+
+  defaultConfig {
+    applicationId "com.mochance.mocletters"
+    minSdk 24
+    targetSdk 34
+    versionCode 1
+    versionName "1.0.0"
+
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+  }
+
+  def keystorePath = project.findProperty("MOC_KEYSTORE_PATH")
+  def keystorePassword = project.findProperty("MOC_KEYSTORE_PASSWORD")
+  def keyAlias = project.findProperty("MOC_KEY_ALIAS")
+  def keyPassword = project.findProperty("MOC_KEY_PASSWORD")
+
+  signingConfigs {
+    release {
+      if (keystorePath) {
+        storeFile file(keystorePath)
+        storePassword keystorePassword
+        keyAlias keyAlias
+        keyPassword keyPassword
+      }
+    }
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+      shrinkResources false
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+      signingConfig signingConfigs.release
+    }
+    debug {
+      applicationIdSuffix ".debug"
+      versionNameSuffix "-debug"
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+dependencies {
+  implementation 'androidx.appcompat:appcompat:1.7.0'
+  implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
+  implementation 'androidx.webkit:webkit:1.12.1'
+  implementation 'com.google.android.material:material:1.12.0'
+}
