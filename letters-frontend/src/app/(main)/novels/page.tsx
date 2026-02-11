@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { trpc } from "@/lib/trpc";
 import { formatRelativeTime, truncateText } from "@/lib/utils";
-import { Plus, BookOpen, Trash2, Image as ImageIcon } from "lucide-react";
+import { Plus, BookOpen, Trash2 } from "lucide-react";
 
 export default function NovelsPage() {
   const t = useTranslations("novels");
@@ -152,15 +152,17 @@ export default function NovelsPage() {
             >
               {/* Cover */}
               <div className="aspect-[3/4] bg-muted/10 rounded-lg mb-4 overflow-hidden flex items-center justify-center">
-                {novel.coverUrl ? (
-                  <img
-                    src={novel.coverUrl}
-                    alt={novel.title}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <ImageIcon className="w-12 h-12 text-muted/30" />
-                )}
+                <img
+                  src={novel.coverUrl || "/images/default-novel-cover.jpg"}
+                  alt={novel.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.src.endsWith("/images/default-novel-cover.jpg")) {
+                      target.src = "/images/default-novel-cover.jpg";
+                    }
+                  }}
+                />
               </div>
 
               {/* Info */}
