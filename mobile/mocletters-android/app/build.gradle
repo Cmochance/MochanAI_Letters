@@ -18,16 +18,16 @@ android {
 
   def keystorePath = project.findProperty("MOC_KEYSTORE_PATH")
   def keystorePassword = project.findProperty("MOC_KEYSTORE_PASSWORD")
-  def keyAlias = project.findProperty("MOC_KEY_ALIAS")
-  def keyPassword = project.findProperty("MOC_KEY_PASSWORD")
+  def keyAliasValue = project.findProperty("MOC_KEY_ALIAS")
+  def keyPasswordValue = project.findProperty("MOC_KEY_PASSWORD")
 
   signingConfigs {
     release {
       if (keystorePath) {
         storeFile file(keystorePath)
         storePassword keystorePassword
-        keyAlias keyAlias
-        keyPassword keyPassword
+        keyAlias keyAliasValue
+        keyPassword keyPasswordValue
       }
     }
   }
