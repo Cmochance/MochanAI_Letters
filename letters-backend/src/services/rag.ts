@@ -627,16 +627,7 @@ export async function getAIContext(
         summary,
       };
     })
-    .filter(
-      (
-        chapter
-      ): chapter is {
-        number: number;
-        title: string;
-        content: string;
-        summary?: string;
-      } => chapter !== null
-    );
+    .filter((chapter): chapter is NonNullable<typeof chapter> => chapter !== null);
 
   const effectiveQuery = buildNovelRagQuery({
     chapterNumber,
