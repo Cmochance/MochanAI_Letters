@@ -1,4 +1,4 @@
-import { eq, desc, and, sql, inArray, isNull } from "drizzle-orm";
+import { eq, desc, and, sql, inArray, isNull, lt } from "drizzle-orm";
 import { db } from "./index.js";
 import {
   users,
@@ -16,7 +16,11 @@ import {
   paperSectionEmbeddings,
   paperNotes,
   paperNoteEmbeddings,
+  paperKbSyncItems,
   paperDataType,
+  paperKbEntityType,
+  paperKbLang,
+  paperKbSyncStatus,
   type InsertUser,
   type InsertNovel,
   type InsertChapter,
@@ -30,6 +34,7 @@ import {
   type InsertPaperSectionEmbedding,
   type InsertPaperNote,
   type InsertPaperNoteEmbedding,
+  type InsertPaperKbSyncItem,
   workspaceType,
   expandJobStatus,
   noteCategory,
@@ -42,6 +47,10 @@ export type NoteCategoryValue = (typeof noteCategory.enumValues)[number];
 export type PaperNoteCategoryValue =
   (typeof paperNoteCategory.enumValues)[number];
 export type PaperDataTypeValue = (typeof paperDataType.enumValues)[number];
+export type PaperKbEntityTypeValue = (typeof paperKbEntityType.enumValues)[number];
+export type PaperKbLangValue = (typeof paperKbLang.enumValues)[number];
+export type PaperKbSyncStatusValue =
+  (typeof paperKbSyncStatus.enumValues)[number];
 
 // ============ Users ============
 
@@ -555,6 +564,107 @@ export async function getPlanDocumentById(userId: number, documentId: number) {
   return result[0] || null;
 }
 
+export async function getRecentNovelPlanSummaries(
+  novelId: number,
+  beforeSectionNumber: number,
+  limit: number = 3
+): Promise<
+  Array<{
+    sectionNumber: number;
+    chapterId: number | null;
+    chapterTitle: string | null;
+    version: number;
+    theme: string;
+    framework: string;
+    conflicts: string;
+    interactions: string;
+  }>
+> {
+  if (beforeSectionNumber <= 1 || limit <= 0) {
+    return [];
+  }
+
+  const documents = await db
+    .select({
+      id: aiPlanDocuments.id,
+      sectionNumber: aiPlanDocuments.sectionNumber,
+      chapterId: aiPlanDocuments.chapterId,
+    })
+    .from(aiPlanDocuments)
+    .where(
+      and(
+        eq(aiPlanDocuments.workspaceType, "novel"),
+        eq(aiPlanDocuments.workspaceId, novelId),
+        lt(aiPlanDocuments.sectionNumber, beforeSectionNumber)
+      )
+    )
+    .orderBy(desc(aiPlanDocuments.sectionNumber))
+    .limit(limit);
+
+  if (documents.length === 0) {
+    return [];
+  }
+
+  const chapterIds = Array.from(
+    new Set(
+      documents
+        .map((doc) => doc.chapterId)
+        .filter((chapterId): chapterId is number => typeof chapterId === "number")
+    )
+  );
+  const chapterTitleMap = new Map<number, string>();
+
+  if (chapterIds.length > 0) {
+    const chapterRows = await db
+      .select({
+        id: chapters.id,
+        title: chapters.title,
+      })
+      .from(chapters)
+      .where(inArray(chapters.id, chapterIds));
+
+    for (const row of chapterRows) {
+      chapterTitleMap.set(row.id, row.title);
+    }
+  }
+
+  const versionRows = await Promise.all(
+    documents.map(async (doc) => {
+      const latest = await getLatestPlanVersion(doc.id);
+      if (!latest) return null;
+
+      return {
+        sectionNumber: doc.sectionNumber,
+        chapterId: doc.chapterId ?? null,
+        chapterTitle:
+          doc.chapterId && chapterTitleMap.has(doc.chapterId)
+            ? chapterTitleMap.get(doc.chapterId)!
+            : null,
+        version: latest.version,
+        theme: latest.theme,
+        framework: latest.framework,
+        conflicts: latest.conflicts,
+        interactions: latest.interactions,
+      };
+    })
+  );
+
+  return versionRows.filter(
+    (
+      row
+    ): row is {
+      sectionNumber: number;
+      chapterId: number | null;
+      chapterTitle: string | null;
+      version: number;
+      theme: string;
+      framework: string;
+      conflicts: string;
+      interactions: string;
+    } => row !== null
+  );
+}
+
 export async function getOrCreatePlanDocument(
   userId: number,
   workspace: WorkspaceTypeValue,
@@ -867,6 +977,10 @@ export async function getUserPapers(userId: number) {
     .from(papers)
     .where(eq(papers.userId, userId))
     .orderBy(desc(papers.updatedAt));
+}
+
+export async function getAllPapers() {
+  return db.select().from(papers).orderBy(desc(papers.updatedAt));
 }
 
 export async function getPaperById(paperId: number) {
@@ -1199,6 +1313,236 @@ export async function searchSimilarPaperNoteChunks(
     chunk_index: Number(row.chunk_index),
     similarity: Number(row.similarity),
   }));
+}
+
+// ============ Paper Knowledge Sync ============
+
+export async function getPaperKbSyncItems(paperId: number) {
+  return db
+    .select()
+    .from(paperKbSyncItems)
+    .where(eq(paperKbSyncItems.paperId, paperId))
+    .orderBy(desc(paperKbSyncItems.updatedAt));
+}
+
+export async function getPaperKbSyncItemByEntity(
+  paperId: number,
+  entityType: Exclude<PaperKbEntityTypeValue, "part">,
+  entityId: number,
+  lang: PaperKbLangValue
+) {
+  const result = await db
+    .select()
+    .from(paperKbSyncItems)
+    .where(
+      and(
+        eq(paperKbSyncItems.paperId, paperId),
+        eq(paperKbSyncItems.entityType, entityType),
+        eq(paperKbSyncItems.entityId, entityId),
+        eq(paperKbSyncItems.lang, lang)
+      )
+    )
+    .limit(1);
+  return result[0] || null;
+}
+
+export async function getPaperKbSyncItemByPart(
+  paperId: number,
+  partKey: string,
+  lang: PaperKbLangValue
+) {
+  const result = await db
+    .select()
+    .from(paperKbSyncItems)
+    .where(
+      and(
+        eq(paperKbSyncItems.paperId, paperId),
+        eq(paperKbSyncItems.entityType, "part"),
+        eq(paperKbSyncItems.partKey, partKey),
+        eq(paperKbSyncItems.lang, lang)
+      )
+    )
+    .limit(1);
+  return result[0] || null;
+}
+
+export async function createPaperKbSyncItem(
+  data: Omit<InsertPaperKbSyncItem, "id" | "createdAt" | "updatedAt">
+) {
+  const result = await db
+    .insert(paperKbSyncItems)
+    .values(data)
+    .returning();
+  return result[0];
+}
+
+export async function updatePaperKbSyncItem(
+  id: number,
+  data: Partial<
+    Pick<
+      InsertPaperKbSyncItem,
+      "gcsUri" | "contentHash" | "ragFileName" | "status" | "retryCount" | "lastError"
+    >
+  >
+) {
+  await db
+    .update(paperKbSyncItems)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(paperKbSyncItems.id, id));
+}
+
+export async function deletePaperKbSyncItem(id: number) {
+  await db.delete(paperKbSyncItems).where(eq(paperKbSyncItems.id, id));
+}
+
+export async function listPaperKbSyncItemsByStatus(
+  paperId: number,
+  statuses: PaperKbSyncStatusValue[],
+  limit: number = 200
+) {
+  if (statuses.length === 0) return [];
+  return db
+    .select()
+    .from(paperKbSyncItems)
+    .where(
+      and(
+        eq(paperKbSyncItems.paperId, paperId),
+        inArray(paperKbSyncItems.status, statuses)
+      )
+    )
+    .orderBy(desc(paperKbSyncItems.updatedAt))
+    .limit(limit);
+}
+
+export async function upsertPaperKbSyncItemForEntity(input: {
+  paperId: number;
+  entityType: Exclude<PaperKbEntityTypeValue, "part">;
+  entityId: number;
+  lang: PaperKbLangValue;
+  status?: PaperKbSyncStatusValue;
+}) {
+  const existing = await getPaperKbSyncItemByEntity(
+    input.paperId,
+    input.entityType,
+    input.entityId,
+    input.lang
+  );
+
+  if (!existing) {
+    return createPaperKbSyncItem({
+      paperId: input.paperId,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      partKey: null,
+      lang: input.lang,
+      status: input.status || "pending",
+    });
+  }
+
+  await updatePaperKbSyncItem(existing.id, {
+    status: input.status || "pending",
+    lastError: null,
+  });
+  return (await getPaperKbSyncItemByEntity(
+    input.paperId,
+    input.entityType,
+    input.entityId,
+    input.lang
+  ))!;
+}
+
+export async function upsertPaperKbSyncItemForPart(input: {
+  paperId: number;
+  partKey: string;
+  lang: PaperKbLangValue;
+  status?: PaperKbSyncStatusValue;
+}) {
+  const existing = await getPaperKbSyncItemByPart(
+    input.paperId,
+    input.partKey,
+    input.lang
+  );
+  if (!existing) {
+    return createPaperKbSyncItem({
+      paperId: input.paperId,
+      entityType: "part",
+      entityId: null,
+      partKey: input.partKey,
+      lang: input.lang,
+      status: input.status || "pending",
+    });
+  }
+
+  await updatePaperKbSyncItem(existing.id, {
+    status: input.status || "pending",
+    lastError: null,
+  });
+  return (await getPaperKbSyncItemByPart(
+    input.paperId,
+    input.partKey,
+    input.lang
+  ))!;
+}
+
+export async function markPaperKbEntityDeletePending(
+  paperId: number,
+  entityType: Exclude<PaperKbEntityTypeValue, "part">,
+  entityId: number
+) {
+  await db
+    .update(paperKbSyncItems)
+    .set({ status: "delete_pending", updatedAt: new Date() })
+    .where(
+      and(
+        eq(paperKbSyncItems.paperId, paperId),
+        eq(paperKbSyncItems.entityType, entityType),
+        eq(paperKbSyncItems.entityId, entityId)
+      )
+    );
+}
+
+export async function getPaperKbSyncStatusSummary(paperId: number) {
+  const rows = await db
+    .select({
+      status: paperKbSyncItems.status,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(paperKbSyncItems)
+    .where(eq(paperKbSyncItems.paperId, paperId))
+    .groupBy(paperKbSyncItems.status);
+
+  const summary: Record<PaperKbSyncStatusValue, number> = {
+    pending: 0,
+    syncing: 0,
+    synced: 0,
+    error: 0,
+    delete_pending: 0,
+  };
+
+  for (const row of rows) {
+    summary[row.status] = Number(row.count) || 0;
+  }
+
+  const state: "idle" | "syncing" | "error" =
+    summary.syncing > 0 || summary.pending > 0 || summary.delete_pending > 0
+      ? "syncing"
+      : summary.error > 0
+        ? "error"
+        : "idle";
+
+  return { state, summary };
+}
+
+export async function tryAcquirePaperKbLock(paperId: number): Promise<boolean> {
+  const lockKey = 700_000_000 + paperId;
+  const rows = await db.execute(sql`SELECT pg_try_advisory_lock(${lockKey}) AS locked`);
+  const first = rows[0] as { locked?: unknown } | undefined;
+  return Boolean(first?.locked);
+}
+
+export async function releasePaperKbLock(paperId: number): Promise<void> {
+  const lockKey = 700_000_000 + paperId;
+  await db.execute(sql`SELECT pg_advisory_unlock(${lockKey})`);
 }
 
 // ============ Utility ============

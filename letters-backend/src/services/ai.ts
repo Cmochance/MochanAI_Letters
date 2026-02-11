@@ -205,6 +205,7 @@ export async function generatePaperOutline(
     userApiKey: embeddingApiKey,
     userBaseUrl: embeddingBaseUrl,
     userModel: embeddingModel,
+    provider: "hybrid",
   });
 
   const prompt = buildPaperOutlinePrompt(context, sectionNumber);
@@ -241,6 +242,7 @@ export async function expandPaperContent(
     userApiKey: embeddingApiKey,
     userBaseUrl: embeddingBaseUrl,
     userModel: embeddingModel,
+    provider: "hybrid",
   });
 
   const prompt = buildPaperExpansionPrompt(
@@ -269,10 +271,12 @@ function buildNovelOutlinePrompt(
   chapterNumber: number
 ): string {
   const recentChaptersText = context.recentChapters
-    .map(
-      (ch) =>
-        `【第 ${ch.number} 章：${ch.title}】\n${(ch.summary || ch.content).substring(0, 500)}...`
-    )
+    .map((ch) => {
+      const summary = (ch.summary || ch.content || "").trim();
+      const normalizedSummary =
+        summary.length > 520 ? `${summary.slice(0, 520)}...` : summary;
+      return `【第 ${ch.number} 章：${ch.title}】\n${normalizedSummary || "暂无可用剧情总结"}`;
+    })
     .join("\n\n");
 
   return `你是一位资深小说编辑,正在帮助作者规划下一章节。
@@ -286,7 +290,7 @@ ${context.structuredNotesContext || "暂无分类笔记"}
 【灵感笔记（语义检索）】
 ${context.noteRagContext || "暂无语义检索笔记"}
 
-【前文回顾】
+【前文剧情总结】
 ${recentChaptersText || "这是第一章"}
 
 【任务】

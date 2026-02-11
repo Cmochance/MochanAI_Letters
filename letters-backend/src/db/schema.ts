@@ -183,6 +183,22 @@ export const paperDataType = pgEnum("paper_data_type", [
   "other",
 ]);
 
+export const paperKbEntityType = pgEnum("paper_kb_entity_type", [
+  "section",
+  "note",
+  "part",
+]);
+
+export const paperKbSyncStatus = pgEnum("paper_kb_sync_status", [
+  "pending",
+  "syncing",
+  "synced",
+  "error",
+  "delete_pending",
+]);
+
+export const paperKbLang = pgEnum("paper_kb_lang", ["zh", "en"]);
+
 /**
  * Notes table - stores inspiration notes
  */
@@ -337,6 +353,9 @@ export const papers = pgTable("papers", {
   aiBodyEn: text("ai_body_en"),
   aiConclusionZh: text("ai_conclusion_zh"),
   aiConclusionEn: text("ai_conclusion_en"),
+  vertexRagCorpusName: varchar("vertex_rag_corpus_name", { length: 255 }),
+  vertexRagReadyAt: timestamp("vertex_rag_ready_at"),
+  vertexLastSyncAt: timestamp("vertex_last_sync_at"),
   totalWords: integer("total_words").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -425,3 +444,25 @@ export const paperNoteEmbeddings = pgTable("paper_note_embeddings", {
 
 export type PaperNoteEmbedding = typeof paperNoteEmbeddings.$inferSelect;
 export type InsertPaperNoteEmbedding = typeof paperNoteEmbeddings.$inferInsert;
+
+export const paperKbSyncItems = pgTable("paper_kb_sync_items", {
+  id: serial("id").primaryKey(),
+  paperId: integer("paper_id")
+    .notNull()
+    .references(() => papers.id, { onDelete: "cascade" }),
+  entityType: paperKbEntityType("entity_type").notNull(),
+  entityId: integer("entity_id"),
+  partKey: varchar("part_key", { length: 64 }),
+  lang: paperKbLang("lang").notNull(),
+  gcsUri: varchar("gcs_uri", { length: 1000 }),
+  contentHash: varchar("content_hash", { length: 128 }),
+  ragFileName: varchar("rag_file_name", { length: 500 }),
+  status: paperKbSyncStatus("status").default("pending").notNull(),
+  retryCount: integer("retry_count").default(0).notNull(),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type PaperKbSyncItem = typeof paperKbSyncItems.$inferSelect;
+export type InsertPaperKbSyncItem = typeof paperKbSyncItems.$inferInsert;

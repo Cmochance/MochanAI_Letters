@@ -4,6 +4,12 @@ import {
   batchGenerateEmbeddings,
   isEmbeddingConfigured,
 } from "./embedding.js";
+import {
+  ensurePaperCorpus,
+  isVertexRagConfigured,
+  retrieveContexts,
+  type VertexContextSource,
+} from "./vertexRag.js";
 
 /**
  * RAG (Retrieval-Augmented Generation) Service
@@ -14,6 +20,10 @@ const DEFAULT_CHUNK_SIZE = 800;
 const DEFAULT_CHUNK_OVERLAP = 100;
 const MIN_CONTENT_LENGTH = 100;
 const MAX_CONTEXT_CHARS = 2200;
+const DEFAULT_RAG_SIMILARITY_THRESHOLD = 0.45;
+const EARLY_OUTLINE_RAG_SIMILARITY_THRESHOLD = 0.35;
+const EARLY_OUTLINE_CONTEXT_LIMIT = 3;
+const EARLY_OUTLINE_RAG_FALLBACK_LIMIT = 2;
 
 const NOVEL_NOTE_CATEGORY_LABELS: Record<db.NoteCategoryValue, string> = {
   inspiration: "灵感",
@@ -458,6 +468,75 @@ async function buildStructuredNovelNotesContext(
   return categoryLines.join("\n");
 }
 
+type NovelPlanSummary = {
+  sectionNumber: number;
+  chapterId: number | null;
+  chapterTitle: string | null;
+  version: number;
+  theme: string;
+  framework: string;
+  conflicts: string;
+  interactions: string;
+};
+
+function summarizeNarrative(text: string, maxChars: number = 500): string {
+  const normalized = text.trim();
+  if (!normalized) return "";
+  return normalized.length > maxChars ? `${normalized.slice(0, maxChars)}...` : normalized;
+}
+
+function buildNovelPlanSummary(plan: NovelPlanSummary): string {
+  const lines = [
+    `主题：${plan.theme}`,
+    `框架：${plan.framework}`,
+    `冲突：${plan.conflicts}`,
+    `互动：${plan.interactions}`,
+  ];
+  return summarizeNarrative(lines.join("；"), 520);
+}
+
+function buildNovelRagQuery(params: {
+  chapterNumber: number;
+  query?: string;
+  recentChapters: Array<{ title: string; summary?: string; content: string }>;
+}): string {
+  const baseQuery =
+    params.query?.trim() ||
+    `第${params.chapterNumber}章 情节发展 人物关系 冲突 灵感`;
+
+  const narrativeContext = params.recentChapters
+    .map((chapter) => {
+      const summary = summarizeNarrative(chapter.summary || chapter.content, 180);
+      if (!summary) return "";
+      return `${chapter.title}：${summary}`;
+    })
+    .filter(Boolean)
+    .join("；");
+
+  if (!narrativeContext) {
+    return baseQuery;
+  }
+
+  return `${baseQuery}\n前文剧情总结：${summarizeNarrative(narrativeContext, 900)}`;
+}
+
+function pickRelevantBySimilarity<T extends { similarity: number }>(
+  results: T[],
+  threshold: number,
+  fallbackLimit: number
+): T[] {
+  const matched = results.filter((row) => row.similarity >= threshold);
+  if (matched.length > 0) {
+    return matched;
+  }
+
+  if (fallbackLimit > 0) {
+    return results.slice(0, fallbackLimit);
+  }
+
+  return [];
+}
+
 export async function getAIContext(
   novelId: number,
   chapterNumber: number,
@@ -496,16 +575,79 @@ export async function getAIContext(
     userModel,
   } = options || {};
 
-  const allRecentChapters = await db.getRecentChapters(novelId, recentCount + 1);
-  const recentChapters = allRecentChapters
+  const isEarlyOutline = phase === "outline" && chapterNumber <= EARLY_OUTLINE_CONTEXT_LIMIT;
+  const contextLimit = isEarlyOutline
+    ? Math.max(recentCount, EARLY_OUTLINE_CONTEXT_LIMIT)
+    : recentCount;
+
+  const allRecentChapters = await db.getRecentChapters(novelId, contextLimit + 2);
+  const chapterCandidates = allRecentChapters
     .filter((ch) => ch.chapterNumber < chapterNumber)
-    .slice(0, recentCount)
+    .slice(0, contextLimit)
     .map((ch) => ({
       number: ch.chapterNumber,
       title: ch.title,
       content: ch.content,
-      summary: ch.content.length > 500 ? `${ch.content.slice(0, 500)}...` : ch.content,
+      summary: summarizeNarrative(ch.content, 500),
     }));
+
+  const planCandidates: NovelPlanSummary[] = await db.getRecentNovelPlanSummaries(
+    novelId,
+    chapterNumber,
+    contextLimit
+  );
+
+  const chapterByNumber = new Map(chapterCandidates.map((chapter) => [chapter.number, chapter]));
+  const planByNumber = new Map(planCandidates.map((plan) => [plan.sectionNumber, plan]));
+
+  const mergedNumbers = Array.from(
+    new Set([...chapterByNumber.keys(), ...planByNumber.keys()])
+  )
+    .filter((number) => number < chapterNumber)
+    .sort((a, b) => b - a)
+    .slice(0, contextLimit);
+
+  const recentChapters = mergedNumbers
+    .map((number) => {
+      const chapter = chapterByNumber.get(number);
+      const plan = planByNumber.get(number);
+
+      const summary = plan
+        ? buildNovelPlanSummary(plan)
+        : summarizeNarrative(chapter?.summary || chapter?.content || "", 500);
+
+      if (!chapter && !summary) {
+        return null;
+      }
+
+      return {
+        number,
+        title: chapter?.title || plan?.chapterTitle || `第 ${number} 章`,
+        content: chapter?.content || "",
+        summary,
+      };
+    })
+    .filter(
+      (
+        chapter
+      ): chapter is {
+        number: number;
+        title: string;
+        content: string;
+        summary?: string;
+      } => chapter !== null
+    );
+
+  const effectiveQuery = buildNovelRagQuery({
+    chapterNumber,
+    query,
+    recentChapters,
+  });
+
+  const ragSimilarityThreshold = isEarlyOutline
+    ? EARLY_OUTLINE_RAG_SIMILARITY_THRESHOLD
+    : DEFAULT_RAG_SIMILARITY_THRESHOLD;
+  const ragFallbackLimit = isEarlyOutline ? EARLY_OUTLINE_RAG_FALLBACK_LIMIT : 0;
 
   const selectedCategories =
     noteCategories ||
@@ -522,19 +664,22 @@ export async function getAIContext(
   const hasEmbeddings = chapterEmbeddingCount + noteEmbeddingCount > 0;
 
   let ragContext = "";
-  if (query && chapterEmbeddingCount > 0) {
+  if (effectiveQuery && chapterEmbeddingCount > 0) {
     try {
       const ragResults = await searchRAGContext(
         novelId,
-        query,
+        effectiveQuery,
         ragLimit,
         userApiKey,
         userBaseUrl,
         userModel
       );
 
-      ragContext = ragResults
-        .filter((r) => r.similarity > 0.45)
+      ragContext = pickRelevantBySimilarity(
+        ragResults,
+        ragSimilarityThreshold,
+        ragFallbackLimit
+      )
         .map((r) => truncateContext(r.content, 350))
         .join("\n\n---\n\n");
     } catch (error) {
@@ -543,19 +688,22 @@ export async function getAIContext(
   }
 
   let noteRagContext = "";
-  if (query && noteEmbeddingCount > 0) {
+  if (effectiveQuery && noteEmbeddingCount > 0) {
     try {
       const noteResults = await searchNovelNoteContext(
         novelId,
-        query,
+        effectiveQuery,
         noteRagLimit,
         userApiKey,
         userBaseUrl,
         userModel
       );
 
-      noteRagContext = noteResults
-        .filter((r) => r.similarity > 0.45)
+      noteRagContext = pickRelevantBySimilarity(
+        noteResults,
+        ragSimilarityThreshold,
+        ragFallbackLimit
+      )
         .map(
           (r) =>
             `[${NOVEL_NOTE_CATEGORY_LABELS[r.category]}] ${truncateContext(
@@ -678,6 +826,16 @@ async function searchPaperNoteContext(
   }));
 }
 
+export type PaperKnowledgeProvider = "pgvector" | "vertex" | "hybrid";
+
+export interface PaperContextSource {
+  provider: "vertex" | "pgvector";
+  title?: string;
+  uri?: string;
+  snippet: string;
+  score?: number;
+}
+
 export async function getPaperAIContext(
   paperId: number,
   sectionNumber: number,
@@ -691,6 +849,7 @@ export async function getPaperAIContext(
     userApiKey?: string;
     userBaseUrl?: string;
     userModel?: string;
+    provider?: PaperKnowledgeProvider;
   }
 ): Promise<{
   ragContext: string;
@@ -703,6 +862,9 @@ export async function getPaperAIContext(
     summary?: string;
   }>;
   hasEmbeddings: boolean;
+  sources?: PaperContextSource[];
+  providerUsed?: "vertex" | "pgvector";
+  fallbackReason?: string;
 }> {
   const {
     query,
@@ -714,6 +876,7 @@ export async function getPaperAIContext(
     userApiKey,
     userBaseUrl,
     userModel,
+    provider = ((process.env.KNOWLEDGE_PROVIDER || "hybrid") as PaperKnowledgeProvider),
   } = options || {};
 
   const allRecentSections = await db.getRecentPaperSections(paperId, recentCount + 1);
@@ -745,50 +908,129 @@ export async function getPaperAIContext(
   const hasEmbeddings = sectionEmbeddingCount + noteEmbeddingCount > 0;
 
   let ragContext = "";
-  if (query && sectionEmbeddingCount > 0) {
-    try {
-      const results = await searchPaperSectionContext(
-        paperId,
-        query,
-        ragLimit,
-        userApiKey,
-        userBaseUrl,
-        userModel
-      );
-
-      ragContext = results
-        .filter((r) => r.similarity > 0.45)
-        .map((r) => truncateContext(r.content, 350))
-        .join("\n\n---\n\n");
-    } catch (error) {
-      console.error("Paper section RAG search failed:", error);
-    }
-  }
-
   let noteRagContext = "";
-  if (query && noteEmbeddingCount > 0) {
-    try {
-      const results = await searchPaperNoteContext(
-        paperId,
-        query,
-        noteRagLimit,
-        userApiKey,
-        userBaseUrl,
-        userModel
-      );
+  const sources: PaperContextSource[] = [];
+  let providerUsed: "vertex" | "pgvector" = "pgvector";
+  let fallbackReason: string | undefined;
 
-      noteRagContext = results
-        .filter((r) => r.similarity > 0.45)
-        .map(
-          (r) =>
-            `[${PAPER_NOTE_CATEGORY_LABELS[r.category]}] ${truncateContext(
-              r.content,
-              240
-            )}`
-        )
-        .join("\n");
+  const runPgVectorSearch = async () => {
+    if (query && sectionEmbeddingCount > 0) {
+      try {
+        const results = await searchPaperSectionContext(
+          paperId,
+          query,
+          ragLimit,
+          userApiKey,
+          userBaseUrl,
+          userModel
+        );
+
+        const filtered = results.filter((r) => r.similarity > 0.45);
+        ragContext = filtered
+          .map((r) => truncateContext(r.content, 350))
+          .join("\n\n---\n\n");
+        sources.push(
+          ...filtered.map((r) => ({
+            provider: "pgvector" as const,
+            snippet: truncateContext(r.content, 350),
+            score: r.similarity,
+          }))
+        );
+      } catch (error) {
+        console.error("Paper section RAG search failed:", error);
+      }
+    }
+
+    if (query && noteEmbeddingCount > 0) {
+      try {
+        const results = await searchPaperNoteContext(
+          paperId,
+          query,
+          noteRagLimit,
+          userApiKey,
+          userBaseUrl,
+          userModel
+        );
+
+        noteRagContext = results
+          .filter((r) => r.similarity > 0.45)
+          .map(
+            (r) =>
+              `[${PAPER_NOTE_CATEGORY_LABELS[r.category]}] ${truncateContext(
+                r.content,
+                240
+              )}`
+          )
+          .join("\n");
+      } catch (error) {
+        console.error("Paper note RAG search failed:", error);
+      }
+    }
+  };
+
+  const runVertexSearch = async (): Promise<boolean> => {
+    if (!query || !isVertexRagConfigured()) {
+      return false;
+    }
+
+    const corpusName = await ensurePaperCorpus(paperId);
+    if (!corpusName) {
+      return false;
+    }
+
+    const vertex = await retrieveContexts({
+      paperId,
+      corpusName,
+      query,
+      topK: ragLimit,
+    });
+
+    ragContext = vertex.ragContext;
+    const normalized = (vertex.sources || []).map<PaperContextSource>(
+      (source: VertexContextSource) => ({
+        provider: "vertex",
+        title: source.title,
+        uri: source.uri,
+        snippet: source.snippet,
+        score: source.score,
+      })
+    );
+    sources.push(...normalized);
+    return Boolean(ragContext || normalized.length > 0);
+  };
+
+  if (provider === "pgvector") {
+    providerUsed = "pgvector";
+    await runPgVectorSearch();
+  } else if (provider === "vertex") {
+    try {
+      const hasVertexResult = await runVertexSearch();
+      if (hasVertexResult) {
+        providerUsed = "vertex";
+      } else {
+        providerUsed = "pgvector";
+        fallbackReason = "vertex_empty_or_unconfigured";
+        await runPgVectorSearch();
+      }
     } catch (error) {
-      console.error("Paper note RAG search failed:", error);
+      providerUsed = "pgvector";
+      fallbackReason = `vertex_error:${error instanceof Error ? error.message : String(error)}`;
+      await runPgVectorSearch();
+    }
+  } else {
+    try {
+      const hasVertexResult = await runVertexSearch();
+      if (hasVertexResult) {
+        providerUsed = "vertex";
+      } else {
+        providerUsed = "pgvector";
+        fallbackReason = "vertex_empty_or_unconfigured";
+        await runPgVectorSearch();
+      }
+    } catch (error) {
+      providerUsed = "pgvector";
+      fallbackReason = `vertex_error:${error instanceof Error ? error.message : String(error)}`;
+      await runPgVectorSearch();
     }
   }
 
@@ -798,6 +1040,9 @@ export async function getPaperAIContext(
     structuredNotesContext,
     recentSections,
     hasEmbeddings,
+    sources,
+    providerUsed,
+    fallbackReason,
   };
 }
 

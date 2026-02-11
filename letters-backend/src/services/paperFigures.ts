@@ -40,6 +40,14 @@ export interface FigureAnalysisResult {
   keyTakeawaysZh?: string[];
   keyTakeawaysEn?: string[];
   webSearchEnabled: boolean;
+  providerUsed?: "vertex" | "pgvector";
+  sources?: Array<{
+    provider: "vertex" | "pgvector";
+    title?: string;
+    uri?: string;
+    snippet: string;
+    score?: number;
+  }>;
 }
 
 function normalizeDataType(raw: unknown): db.PaperDataTypeValue {
@@ -164,6 +172,7 @@ export async function analyzePaperFigure(options: {
     userApiKey: options.userSettings?.embeddingApiKey || undefined,
     userBaseUrl: options.userSettings?.embeddingBaseUrl || undefined,
     userModel: options.userSettings?.embeddingModel || undefined,
+    provider: "hybrid",
   });
 
   const webSearchEnabled = isWebSearchConfigured();
@@ -287,5 +296,7 @@ No markdown. No extra keys.`;
       ? parsed.keyTakeawaysEn.map(String).filter(Boolean).slice(0, 12)
       : [],
     webSearchEnabled,
+    providerUsed: rag.providerUsed,
+    sources: rag.sources || [],
   };
 }

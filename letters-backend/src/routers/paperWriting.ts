@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
 import * as db from "../db/queries.js";
 import { generatePaperWritingPart } from "../services/paperWriting.js";
+import { enqueueSyncItems, ensureFreshBeforeGenerate } from "../services/paperKnowledge.js";
 
 const partTypeSchema = z.enum([
   "body",
@@ -46,6 +47,7 @@ export const paperWritingRouter = router({
     .input(z.object({ paperId: z.number(), partType: partTypeSchema }))
     .mutation(async ({ ctx, input }) => {
       await ensurePaperOwner(ctx.user.id, input.paperId);
+      await ensureFreshBeforeGenerate(input.paperId);
       const settings = await db.getUserSettings(ctx.user.id);
 
       const draft = await generatePaperWritingPart({
@@ -94,7 +96,12 @@ export const paperWritingRouter = router({
       }
 
       await db.updatePaper(input.paperId, update as any);
+
+      await enqueueSyncItems({
+        paperId: input.paperId,
+        partKeys: [input.partType],
+      });
+
       return { success: true };
     }),
 });
-

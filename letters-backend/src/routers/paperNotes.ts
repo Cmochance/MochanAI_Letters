@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
 import * as db from "../db/queries.js";
 import { vectorizePaperNote } from "../services/rag.js";
+import { enqueueNoteDelete, enqueueSyncItems } from "../services/paperKnowledge.js";
 
 const paperNoteCategorySchema = z.enum([
   "research_question",
@@ -68,6 +69,11 @@ export const paperNotesRouter = router({
         });
       });
 
+      await enqueueSyncItems({
+        paperId: input.paperId,
+        noteIds: [noteId],
+      });
+
       return { id: noteId };
     }),
 
@@ -110,6 +116,11 @@ export const paperNotesRouter = router({
         });
       });
 
+      await enqueueSyncItems({
+        paperId: input.paperId,
+        noteIds: [input.noteId],
+      });
+
       return { success: true };
     }),
 
@@ -121,6 +132,7 @@ export const paperNotesRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Note not found" });
       }
 
+      await enqueueNoteDelete(existing.paperId, existing.id);
       await db.deletePaperNote(input.noteId);
       return { success: true };
     }),

@@ -4,6 +4,7 @@ import { router, protectedProcedure } from "../trpc.js";
 import * as db from "../db/queries.js";
 import { countWords } from "../services/utils.js";
 import { vectorizePaperSection } from "../services/rag.js";
+import { enqueueSectionDelete, enqueueSyncItems } from "../services/paperKnowledge.js";
 
 async function ensurePaperOwner(userId: number, paperId: number) {
   const paper = await db.getPaperById(paperId);
@@ -68,6 +69,11 @@ export const paperSectionsRouter = router({
         });
       });
 
+      await enqueueSyncItems({
+        paperId: input.paperId,
+        sectionIds: [sectionId],
+      });
+
       return { id: sectionId };
     }),
 
@@ -111,7 +117,13 @@ export const paperSectionsRouter = router({
 
       await db.updatePaperSection(input.id, updateData);
 
-      if (input.content !== undefined || input.contentEn !== undefined) {
+      if (
+        input.title !== undefined ||
+        input.content !== undefined ||
+        input.contentEn !== undefined ||
+        input.figureCaptionZh !== undefined ||
+        input.figureCaptionEn !== undefined
+      ) {
         const settings = await db.getUserSettings(ctx.user.id);
         vectorizePaperSection(
           input.id,
@@ -124,6 +136,11 @@ export const paperSectionsRouter = router({
             paperId: section.paperId,
             error,
           });
+        });
+
+        await enqueueSyncItems({
+          paperId: section.paperId,
+          sectionIds: [input.id],
         });
       }
 
@@ -139,6 +156,7 @@ export const paperSectionsRouter = router({
       }
 
       await ensurePaperOwner(ctx.user.id, section.paperId);
+      await enqueueSectionDelete(section.paperId, section.id);
       await db.deletePaperSection(input.id);
 
       return { success: true };

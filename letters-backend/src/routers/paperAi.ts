@@ -8,6 +8,7 @@ import {
   getOutlineFromStoredPlan,
   outlineToText,
 } from "../services/ai.js";
+import { ensureFreshBeforeGenerate } from "../services/paperKnowledge.js";
 
 function getJobErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -127,6 +128,7 @@ export const paperAiRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       await ensurePaperOwner(ctx.user.id, input.paperId);
+      await ensureFreshBeforeGenerate(input.paperId);
 
       const settings = await db.getUserSettings(ctx.user.id);
       const outline = await generatePaperOutline(
@@ -167,6 +169,7 @@ export const paperAiRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       await ensurePaperOwner(ctx.user.id, input.paperId);
+      await ensureFreshBeforeGenerate(input.paperId);
 
       const settings = await db.getUserSettings(ctx.user.id);
       const { outlineText } = await resolveOutlineFromInput(ctx.user.id, input);
@@ -199,6 +202,7 @@ export const paperAiRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       await ensurePaperOwner(ctx.user.id, input.paperId);
+      await ensureFreshBeforeGenerate(input.paperId);
 
       const { outlineText, planDocumentId } = await resolveOutlineFromInput(
         ctx.user.id,

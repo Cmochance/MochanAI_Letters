@@ -13,6 +13,14 @@ type Draft = {
   en: string;
   keywordsZh?: string;
   keywordsEn?: string;
+  providerUsed?: "vertex" | "pgvector";
+  sources?: Array<{
+    provider: "vertex" | "pgvector";
+    title?: string;
+    uri?: string;
+    snippet: string;
+    score?: number;
+  }>;
 };
 
 function partLabel(part: PartType) {
@@ -302,6 +310,44 @@ export default function PaperWritingPage() {
                   </div>
                 </div>
               )}
+
+              {displayed?.sources && displayed.sources.length > 0 && (
+                <details className="mt-6 pt-4 border-t border-border">
+                  <summary className="cursor-pointer text-sm text-foreground">
+                    来源（{displayed.providerUsed === "vertex" ? "Vertex RAG" : "pgvector 回退"}）
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {displayed.sources.slice(0, 12).map((source, index) => (
+                      <div key={`${source.provider}-${index}`} className="rounded-lg border border-border p-3">
+                        <div className="text-xs text-muted mb-1">
+                          {source.provider === "vertex" ? "Vertex" : "pgvector"}
+                          {typeof source.score === "number"
+                            ? ` · score=${source.score.toFixed(3)}`
+                            : ""}
+                        </div>
+                        {source.title && (
+                          <div className="text-sm font-medium text-foreground mb-1">
+                            {source.title}
+                          </div>
+                        )}
+                        {source.uri && (
+                          <a
+                            href={source.uri}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-primary hover:underline break-all"
+                          >
+                            {source.uri}
+                          </a>
+                        )}
+                        <div className="text-sm text-foreground whitespace-pre-wrap mt-1">
+                          {source.snippet}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           </div>
         </div>
@@ -309,4 +355,3 @@ export default function PaperWritingPage() {
     </div>
   );
 }
-

@@ -9,9 +9,12 @@
     "start": "node dist/index.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "kb:backfill": "tsx src/scripts/backfillPaperKb.ts",
+    "kb:verify": "tsx src/scripts/verifyPaperKb.ts"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.18.0",
     "@aws-sdk/client-s3": "^3.888.0",
     "@aws-sdk/s3-request-presigner": "^3.888.0",
     "@supabase/supabase-js": "^2.93.2",
@@ -22,6 +25,7 @@
     "drizzle-orm": "^0.44.5",
     "epub-gen-memory": "^1.1.2",
     "express": "^5.1.0",
+    "google-auth-library": "^10.5.0",
     "image-size": "^2.0.2",
     "jose": "^6.1.0",
     "openai": "^6.17.0",

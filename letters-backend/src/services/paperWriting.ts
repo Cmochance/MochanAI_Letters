@@ -1,5 +1,6 @@
 import * as db from "../db/queries.js";
 import { chatJson } from "./chat.js";
+import { getPaperAIContext } from "./rag.js";
 
 export type PaperWritingPartType =
   | "body"
@@ -13,6 +14,14 @@ export interface PaperWritingDraft {
   en: string;
   keywordsZh?: string;
   keywordsEn?: string;
+  providerUsed?: "vertex" | "pgvector";
+  sources?: Array<{
+    provider: "vertex" | "pgvector";
+    title?: string;
+    uri?: string;
+    snippet: string;
+    score?: number;
+  }>;
 }
 
 function truncate(text: string | null | undefined, max: number): string {
@@ -103,6 +112,25 @@ export async function generatePaperWritingPart(options: {
   }));
 
   const style = getDefaultStyle(options.userSettings?.writingStyle);
+  const queryByPart: Record<PaperWritingPartType, string> = {
+    body: "方法 结果 讨论 图表 数据 证据",
+    introduction: "研究背景 研究问题 文献 缺口 贡献",
+    conclusion: "结论 贡献 局限 未来工作",
+    abstract: "摘要 方法 结果 结论 关键词",
+    title: "研究主题 贡献 关键词 标题",
+  };
+
+  const rag = await getPaperAIContext(options.paperId, 99999, {
+    query: queryByPart[options.partType],
+    phase: "expand",
+    recentCount: 2,
+    ragLimit: 6,
+    noteRagLimit: 6,
+    userApiKey: options.userSettings?.apiKey || undefined,
+    userBaseUrl: options.userSettings?.apiBaseUrl || undefined,
+    userModel: options.userSettings?.modelName || undefined,
+    provider: "hybrid",
+  });
 
   const userPrompt = `Paper context (do not copy verbatim; synthesize):
 ${JSON.stringify(
@@ -128,6 +156,13 @@ ${JSON.stringify(
     },
     figures,
     notes: noteSummaries,
+    knowledge: {
+      providerUsed: rag.providerUsed,
+      ragContext: truncate(rag.ragContext, 2400),
+      noteRagContext: truncate(rag.noteRagContext, 1400),
+      structuredNotesContext: truncate(rag.structuredNotesContext, 1400),
+      sources: (rag.sources || []).slice(0, 12),
+    },
   },
   null,
   2
@@ -154,5 +189,7 @@ ${JSON.stringify(
       typeof result.keywordsZh === "string" ? result.keywordsZh.trim() : undefined,
     keywordsEn:
       typeof result.keywordsEn === "string" ? result.keywordsEn.trim() : undefined,
+    providerUsed: rag.providerUsed,
+    sources: rag.sources || [],
   };
 }

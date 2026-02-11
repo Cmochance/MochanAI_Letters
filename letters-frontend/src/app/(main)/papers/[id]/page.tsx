@@ -53,6 +53,15 @@ export default function PaperDetailPage() {
     existingSectionId: number | null;
     requiresConfirmReplace: boolean;
     webSearchEnabled?: boolean;
+    providerUsed?: "vertex" | "pgvector";
+    knowledgeSyncState?: "idle" | "syncing" | "error" | "disabled";
+    sources?: Array<{
+      provider: "vertex" | "pgvector";
+      title?: string;
+      uri?: string;
+      snippet: string;
+      score?: number;
+    }>;
   } | null>(null);
   const [figureError, setFigureError] = useState<string | null>(null);
 
@@ -292,7 +301,17 @@ export default function PaperDetailPage() {
                     {analysisResult.webSearchEnabled === false && (
                       <span className="text-xs text-muted">未启用 Web Search</span>
                     )}
+                    {analysisResult.providerUsed && (
+                      <span className="text-xs text-muted ml-2">
+                        知识库：{analysisResult.providerUsed === "vertex" ? "Vertex RAG" : "pgvector"}
+                      </span>
+                    )}
                   </div>
+                  {analysisResult.knowledgeSyncState === "syncing" && (
+                    <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 text-sm text-foreground">
+                      知识库同步中，结果可能延迟数秒。
+                    </div>
+                  )}
                   {analysisResult.requiresConfirmReplace && (
                     <div className="p-2 rounded-lg bg-warning/10 border border-warning/20 text-sm text-foreground">
                       该数据类型的小节已存在，保存后将覆盖为最新内容。
@@ -346,6 +365,47 @@ export default function PaperDetailPage() {
                       </div>
                     </div>
                   </details>
+
+                  {analysisResult.sources && analysisResult.sources.length > 0 && (
+                    <details className="rounded-lg border border-border bg-surface/30 p-3">
+                      <summary className="cursor-pointer text-sm text-foreground">
+                        查看知识库来源
+                      </summary>
+                      <div className="mt-3 space-y-3 max-h-56 overflow-y-auto pr-1">
+                        {analysisResult.sources.slice(0, 12).map((source, index) => (
+                          <div
+                            key={`${source.provider}-${index}`}
+                            className="rounded-lg border border-border p-3"
+                          >
+                            <div className="text-xs text-muted mb-1">
+                              {source.provider === "vertex" ? "Vertex" : "pgvector"}
+                              {typeof source.score === "number"
+                                ? ` · score=${source.score.toFixed(3)}`
+                                : ""}
+                            </div>
+                            {source.title && (
+                              <div className="text-sm font-medium text-foreground mb-1">
+                                {source.title}
+                              </div>
+                            )}
+                            {source.uri && (
+                              <a
+                                href={source.uri}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-primary hover:underline break-all"
+                              >
+                                {source.uri}
+                              </a>
+                            )}
+                            <div className="text-sm text-foreground whitespace-pre-wrap mt-1">
+                              {source.snippet}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </div>
               )}
 

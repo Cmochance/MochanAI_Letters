@@ -5,6 +5,7 @@ import * as db from "../db/queries.js";
 import { countWords } from "../services/utils.js";
 import { deleteFile, isStorageConfigured } from "../services/storage.js";
 import { vectorizePaperSection } from "../services/rag.js";
+import { enqueueSyncItems, ensureFreshBeforeGenerate } from "../services/paperKnowledge.js";
 import {
   PAPER_DATA_TYPE_LABEL_ZH,
   analyzePaperFigure,
@@ -48,6 +49,7 @@ export const paperFiguresRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       await ensurePaperOwner(ctx.user.id, input.paperId);
+      const freshness = await ensureFreshBeforeGenerate(input.paperId);
 
       const expectedPrefix = `paper-figures/${ctx.user.id}/${input.paperId}/`;
       if (!input.figure.key.startsWith(expectedPrefix)) {
@@ -83,6 +85,9 @@ export const paperFiguresRouter = router({
         existingSectionId: existing?.id ?? null,
         requiresConfirmReplace: Boolean(existing),
         webSearchEnabled: analysis.webSearchEnabled,
+        providerUsed: analysis.providerUsed,
+        sources: analysis.sources || [],
+        knowledgeSyncState: freshness.state,
       };
     }),
 
@@ -172,6 +177,11 @@ export const paperFiguresRouter = router({
           });
         }
 
+        await enqueueSyncItems({
+          paperId: input.paperId,
+          sectionIds: [existing.id],
+        });
+
         return { sectionId: existing.id, created: false };
       }
 
@@ -211,7 +221,11 @@ export const paperFiguresRouter = router({
         });
       });
 
+      await enqueueSyncItems({
+        paperId: input.paperId,
+        sectionIds: [sectionId],
+      });
+
       return { sectionId, created: true };
     }),
 });
-
