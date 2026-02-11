@@ -46,6 +46,12 @@ export default function NovelDetailPage() {
       utils.chapters.list.invalidate({ novelId });
     },
   });
+  const deleteNovel = trpc.novels.delete.useMutation({
+    onSuccess: () => {
+      utils.novels.list.invalidate();
+      router.push("/novels");
+    },
+  });
 
   const generateCover = trpc.novels.generateCover.useMutation({
     onSuccess: () => {
@@ -75,6 +81,12 @@ export default function NovelDetailPage() {
     e.stopPropagation();
     if (confirm("确定要删除这一章吗？此操作不可撤销。")) {
       deleteChapter.mutate({ id });
+    }
+  };
+  const handleDeleteNovel = () => {
+    if (!currentNovel) return;
+    if (confirm(`确定要删除小说《${currentNovel.title}》吗？此操作不可撤销。`)) {
+      deleteNovel.mutate({ id: novelId });
     }
   };
 
@@ -136,6 +148,14 @@ export default function NovelDetailPage() {
         >
           <ImageIcon className="w-4 h-4" />
           {generateCover.isPending ? "生成中..." : "生成封面"}
+        </button>
+        <button
+          onClick={handleDeleteNovel}
+          disabled={deleteNovel.isPending || !currentNovel}
+          className="btn-secondary flex items-center gap-2 text-error border-error/30 hover:bg-error/10 disabled:opacity-50"
+        >
+          <Trash2 className="w-4 h-4" />
+          {deleteNovel.isPending ? "删除中..." : "删除小说"}
         </button>
       </div>
 

@@ -28,3 +28,6 @@ npm-debug.log*
 
 #backup
 .backup
+
+# Local review artifacts
+.kiro-review/

@@ -7,6 +7,17 @@ import { trpc } from "@/lib/trpc";
 import { formatRelativeTime, truncateText } from "@/lib/utils";
 import { Plus, BookOpen, Trash2 } from "lucide-react";
 
+const DEFAULT_NOVEL_COVER = "/images/default-novel-cover.jpg";
+const PLACEHOLDER_COVER_HOSTS = ["placehold.co", "via.placeholder.com"];
+
+function resolveNovelCoverUrl(coverUrl?: string | null): string {
+  if (!coverUrl) return DEFAULT_NOVEL_COVER;
+  if (PLACEHOLDER_COVER_HOSTS.some((host) => coverUrl.includes(host))) {
+    return DEFAULT_NOVEL_COVER;
+  }
+  return coverUrl;
+}
+
 export default function NovelsPage() {
   const t = useTranslations("novels");
   const tc = useTranslations("common");
@@ -153,13 +164,13 @@ export default function NovelsPage() {
               {/* Cover */}
               <div className="aspect-[3/4] bg-muted/10 rounded-lg mb-4 overflow-hidden flex items-center justify-center">
                 <img
-                  src={novel.coverUrl || "/images/default-novel-cover.jpg"}
+                  src={resolveNovelCoverUrl(novel.coverUrl)}
                   alt={novel.title}
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     const target = e.currentTarget;
-                    if (!target.src.endsWith("/images/default-novel-cover.jpg")) {
-                      target.src = "/images/default-novel-cover.jpg";
+                    if (!target.src.endsWith(DEFAULT_NOVEL_COVER)) {
+                      target.src = DEFAULT_NOVEL_COVER;
                     }
                   }}
                 />
